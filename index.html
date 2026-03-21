@@ -1,0 +1,2061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sediment Defender</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, collection, addDoc, query, where, orderBy, limit, getDocs, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDWQiPmNBnAtI-4Jd4WKvBKcd2l7g6HyA8",
+    authDomain: "sediment-defender.firebaseapp.com",
+    projectId: "sediment-defender",
+    storageBucket: "sediment-defender.firebasestorage.app",
+    messagingSenderId: "13458489625",
+    appId: "1:13458489625:web:1bd3d3475ebea5232d8588"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // Expose to global scope so the rest of the game script can call these
+  window._fbSaveScore = async function(entry){
+    try {
+      await addDoc(collection(db,'scores'), {...entry, timestamp: serverTimestamp()});
+    } catch(e){ console.warn('Firestore write failed:',e); }
+  };
+
+  window._fbGetScores = async function(mapNum){
+    try {
+      const q = query(
+        collection(db,'scores'),
+        where('map','==',mapNum),
+        orderBy('score','desc'),
+        limit(25)
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map(d=>d.data());
+    } catch(e){ console.warn('Firestore read failed:',e); return []; }
+  };
+</script>
+<style>
+:root{
+  --panel-bg:#1a1f2e;--panel-border:#2e3a50;--panel-hover:#252d40;
+  --text-primary:#f0e8d0;--text-secondary:#9aacbf;--text-muted:#5a6a7a;
+  --accent-green:#5cb85c;--accent-amber:#f0a830;--accent-red:#e05050;--accent-blue:#4a9de8;
+  --ui-bg:#111722;--font-display:'Oswald',sans-serif;--font-body:'Source Sans 3',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;overflow:hidden;background:#0d1117;}
+body{display:flex;flex-direction:column;font-family:var(--font-body);}
+.screen{display:none;width:100%;height:100%;}
+.screen.active{display:flex;}
+
+/* TITLE */
+#screen-title{flex-direction:column;align-items:center;justify-content:center;
+  background:linear-gradient(160deg,#0d1a0e 0%,#0a1520 50%,#0d1117 100%);position:relative;overflow:hidden;}
+#screen-title::before{content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 80% 60% at 50% 40%,rgba(74,124,63,0.12) 0%,transparent 70%);}
+.title-content{position:relative;text-align:center;}
+.title-eyebrow{font-size:13px;font-weight:600;letter-spacing:.2em;color:var(--accent-green);text-transform:uppercase;margin-bottom:16px;}
+.title-main{font-family:var(--font-display);font-size:clamp(48px,8vw,90px);font-weight:600;color:var(--text-primary);line-height:1;letter-spacing:.02em;}
+.title-main span{color:var(--accent-amber);}
+.title-sub{font-size:15px;color:var(--text-secondary);margin:18px 0 30px;line-height:1.6;max-width:460px;}
+.title-btn{font-family:var(--font-display);font-size:17px;font-weight:500;letter-spacing:.1em;
+  padding:13px 46px;border:2px solid var(--accent-green);background:transparent;
+  color:var(--accent-green);cursor:pointer;transition:all .2s;text-transform:uppercase;}
+.title-btn:hover{background:var(--accent-green);color:#0d1a0e;}
+.title-mission{margin-top:28px;padding:14px 22px;border:1px solid var(--panel-border);
+  background:rgba(255,255,255,0.03);max-width:460px;text-align:left;}
+.title-mission h3{font-family:var(--font-display);font-size:13px;color:var(--accent-amber);margin-bottom:7px;letter-spacing:.05em;}
+.title-mission p{font-size:13px;color:var(--text-secondary);line-height:1.6;}
+
+/* PLAYER SELECT */
+#screen-player{flex-direction:column;align-items:center;justify-content:center;background:#0d1117;}
+.select-box{background:var(--panel-bg);border:1px solid var(--panel-border);padding:30px;width:370px;max-height:90vh;overflow-y:auto;}
+.select-box h2{font-family:var(--font-display);font-size:22px;color:var(--text-primary);margin-bottom:5px;letter-spacing:.05em;}
+.select-box p{font-size:13px;color:var(--text-secondary);margin-bottom:18px;}
+.period-select{width:100%;padding:9px 11px;background:#0d1117;border:1px solid var(--panel-border);color:var(--text-primary);font-family:var(--font-body);font-size:13px;margin-bottom:14px;outline:none;}
+.period-select:focus{border-color:var(--accent-green);}
+.name-list{display:flex;flex-direction:column;gap:5px;margin-bottom:18px;max-height:250px;overflow-y:auto;}
+.name-btn{padding:8px 13px;background:transparent;border:1px solid var(--panel-border);color:var(--text-secondary);cursor:pointer;text-align:left;font-family:var(--font-body);font-size:13px;transition:all .15s;}
+.name-btn:hover{background:var(--panel-hover);color:var(--text-primary);}
+.name-btn.selected{background:rgba(92,184,92,0.15);border-color:var(--accent-green);color:var(--accent-green);}
+.continue-btn{width:100%;padding:11px;font-family:var(--font-display);font-size:15px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;background:var(--accent-green);color:#0d1a0e;border:none;cursor:pointer;transition:opacity .15s;opacity:.4;}
+.continue-btn.ready{opacity:1;}
+.continue-btn.ready:hover{opacity:.85;}
+
+/* MAP SELECT */
+#screen-mapselect{flex-direction:column;align-items:center;justify-content:center;background:#0d1117;gap:20px;}
+.mapselect-title{font-family:var(--font-display);font-size:28px;color:var(--text-primary);letter-spacing:.06em;text-align:center;}
+.mapselect-sub{font-size:13px;color:var(--text-secondary);text-align:center;margin-top:-16px;}
+.map-cards{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;max-width:860px;align-items:stretch;}
+.map-card{background:var(--panel-bg);border:1px solid var(--panel-border);padding:22px;width:260px;cursor:default;transition:border-color .18s;position:relative;display:flex;flex-direction:column;}
+.map-card:hover{border-color:var(--text-muted);}
+.map-card-diff{font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px;}
+.map-card-num{font-family:var(--font-display);font-size:32px;font-weight:600;color:var(--text-primary);line-height:1;margin-bottom:4px;}
+.map-card-name{font-family:var(--font-display);font-size:15px;color:var(--text-secondary);letter-spacing:.04em;margin-bottom:12px;}
+.map-card-desc{font-size:12px;color:var(--text-muted);line-height:1.6;margin-bottom:14px;flex:1;}
+.map-card-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px;}
+.map-tag{font-size:10px;padding:2px 8px;border:1px solid var(--panel-border);color:var(--text-muted);}
+.map-card-footer{font-size:11px;color:var(--text-muted);border-top:1px solid var(--panel-border);padding-top:10px;margin-bottom:12px;}
+.map-card-footer span{color:var(--accent-amber);}
+.map-card-select{width:100%;padding:9px;font-family:var(--font-display);font-size:13px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--accent-green);background:transparent;color:var(--accent-green);cursor:pointer;transition:all .15s;margin-top:auto;}
+.map-card-select:hover{background:var(--accent-green);color:#0d1a0e;}
+.map-locked-badge{position:absolute;top:12px;right:12px;font-size:10px;padding:2px 8px;background:#1a2510;border:1px solid var(--panel-border);color:var(--text-muted);}
+.mapselect-actions{display:flex;gap:10px;align-items:center;}
+
+/* INSTRUCTIONS */
+#screen-instructions{flex-direction:column;align-items:center;background:#0d1117;overflow-y:auto;padding:28px 16px;}
+.instr-wrap{width:100%;max-width:860px;}
+.instr-header{text-align:center;margin-bottom:28px;}
+.instr-header h1{font-family:var(--font-display);font-size:34px;color:var(--text-primary);letter-spacing:.05em;margin-bottom:7px;}
+.instr-header p{font-size:14px;color:var(--text-secondary);line-height:1.6;max-width:580px;margin:0 auto;}
+.instr-tabs{display:flex;gap:5px;margin-bottom:20px;border-bottom:1px solid var(--panel-border);padding-bottom:10px;}
+.instr-tab{font-family:var(--font-display);font-size:13px;letter-spacing:.06em;text-transform:uppercase;padding:7px 18px;border:1px solid var(--panel-border);background:transparent;color:var(--text-secondary);cursor:pointer;transition:all .15s;}
+.instr-tab:hover{background:var(--panel-hover);}
+.instr-tab.on{border-color:var(--accent-amber);color:var(--accent-amber);background:rgba(240,168,48,0.07);}
+.instr-page{display:none;}
+.instr-page.on{display:block;}
+
+.tower-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:22px;}
+@media(max-width:580px){.tower-grid{grid-template-columns:1fr;}}
+.tower-instr-card{background:var(--panel-bg);border:1px solid var(--panel-border);padding:14px;}
+.ti-header{display:flex;align-items:center;gap:11px;margin-bottom:9px;}
+.ti-icon{width:46px;height:46px;flex-shrink:0;}
+.ti-name{font-family:var(--font-display);font-size:15px;color:var(--text-primary);letter-spacing:.04em;}
+.ti-cost{font-size:11px;color:var(--accent-amber);margin-top:2px;}
+.ti-desc{font-size:12px;color:var(--text-secondary);line-height:1.6;margin-bottom:9px;}
+.ti-eff{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:9px;}
+.ti-tag{font-size:11px;padding:2px 7px;}
+.tag-hi{background:rgba(92,184,92,0.18);color:#5cb85c;border:1px solid #5cb85c44;}
+.tag-med{background:rgba(240,168,48,0.14);color:#f0a830;border:1px solid #f0a83044;}
+.tag-lo{background:rgba(224,80,80,0.14);color:#e05050;border:1px solid #e0505044;}
+.ti-science{font-size:11px;color:#7aaa8a;line-height:1.6;padding:7px 9px;border-left:2px solid var(--accent-green);background:rgba(92,184,92,0.05);}
+
+.sed-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:22px;}
+@media(max-width:580px){.sed-grid{grid-template-columns:1fr;}}
+.sed-card{background:var(--panel-bg);border:1px solid var(--panel-border);padding:14px;}
+.sed-header{display:flex;align-items:center;gap:11px;margin-bottom:9px;}
+.sed-dot{width:18px;height:18px;border-radius:50%;flex-shrink:0;}
+.sed-name{font-family:var(--font-display);font-size:14px;color:var(--text-primary);letter-spacing:.03em;}
+.sed-type{font-size:11px;margin-top:1px;}
+.sed-desc{font-size:12px;color:var(--text-secondary);line-height:1.6;margin-bottom:8px;}
+.sed-harm{font-size:12px;color:#e08888;line-height:1.6;padding:7px 9px;border-left:2px solid var(--accent-red);background:rgba(224,80,80,0.05);margin-bottom:8px;}
+.sed-stats{display:flex;gap:8px;}
+.sed-stat{text-align:center;flex:1;background:var(--ui-bg);padding:5px 3px;}
+.sed-stat-val{font-family:var(--font-display);font-size:14px;color:var(--text-primary);}
+.sed-stat-lbl{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
+
+.econ-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;}
+@media(max-width:500px){.econ-grid{grid-template-columns:1fr;}}
+.econ-card{background:var(--panel-bg);border:1px solid var(--panel-border);padding:12px;text-align:center;}
+.econ-val{font-family:var(--font-display);font-size:26px;color:var(--accent-amber);margin-bottom:3px;}
+.econ-label{font-size:13px;color:var(--text-primary);margin-bottom:3px;}
+.econ-sub{font-size:11px;color:var(--text-secondary);line-height:1.5;}
+.econ-note{background:var(--panel-bg);border:1px solid var(--panel-border);padding:13px;font-size:13px;color:var(--text-secondary);line-height:1.7;margin-bottom:16px;}
+.econ-note strong{color:var(--text-primary);}
+
+.instr-nav{display:flex;justify-content:space-between;margin-top:6px;padding-top:14px;border-top:1px solid var(--panel-border);}
+.instr-nav-btn{font-family:var(--font-display);font-size:13px;letter-spacing:.08em;text-transform:uppercase;padding:9px 24px;border:1px solid var(--panel-border);background:transparent;color:var(--text-secondary);cursor:pointer;transition:all .15s;}
+.instr-nav-btn:hover{background:var(--panel-hover);}
+.instr-nav-btn.primary{border-color:var(--accent-green);color:var(--accent-green);}
+.instr-nav-btn.primary:hover{background:rgba(92,184,92,0.13);}
+
+/* GAME */
+#screen-game{flex-direction:row;height:100vh;}
+#canvas-container{position:relative;flex:1;overflow:hidden;background:#1a2510;}
+#canvas-static,#canvas-dynamic{position:absolute;top:0;left:0;width:100%;height:100%;}
+#canvas-dynamic{pointer-events:none;}
+#side-panel{width:255px;background:var(--panel-bg);border-left:1px solid var(--panel-border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;}
+.panel-hud{padding:11px 13px;background:var(--ui-bg);border-bottom:1px solid var(--panel-border);}
+.hud-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.hud-row:last-child{margin-bottom:0;}
+.hud-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;}
+.hud-val{font-family:var(--font-display);font-size:17px;color:var(--text-primary);}
+.hud-val.money{color:var(--accent-amber);}
+.hud-val.wave{color:var(--accent-blue);}
+.health-bar-wrap{height:6px;background:#1a2510;border:1px solid var(--panel-border);margin-bottom:6px;}
+.health-bar{height:100%;background:var(--accent-green);transition:width .3s,background .3s;}
+.earn-flash{font-size:11px;color:var(--accent-amber);min-height:15px;text-align:right;transition:opacity .5s;}
+.panel-section-title{padding:8px 13px 5px;font-family:var(--font-display);font-size:10px;color:var(--text-muted);letter-spacing:.12em;text-transform:uppercase;border-bottom:1px solid var(--panel-border);}
+.tower-shop{flex:1;overflow-y:auto;padding:5px;}
+.shop-item{display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;cursor:pointer;border:1px solid var(--panel-border);background:transparent;transition:all .15s;}
+.shop-item:hover{background:var(--panel-hover);border-color:var(--text-muted);}
+.shop-item.selected{border-color:var(--accent-amber);background:rgba(240,168,48,0.08);}
+.shop-item.unaffordable{opacity:.35;cursor:not-allowed;}
+.shop-item.locked{opacity:.22;cursor:not-allowed;}
+.shop-icon{width:32px;height:32px;flex-shrink:0;}
+.shop-name{font-family:var(--font-display);font-size:12px;color:var(--text-primary);letter-spacing:.02em;}
+.shop-cost{font-size:11px;color:var(--accent-amber);font-weight:600;}
+.shop-key{font-size:9px;color:var(--text-muted);}
+.shop-lock{font-size:10px;color:var(--text-muted);}
+.tooltip-panel{border-top:1px solid var(--panel-border);padding:10px 12px;background:var(--ui-bg);max-height:290px;overflow-y:auto;}
+.tooltip-panel.hidden{display:none;}
+.tooltip-name{font-family:var(--font-display);font-size:14px;color:var(--text-primary);letter-spacing:.04em;margin-bottom:4px;}
+.tooltip-desc{font-size:11px;color:var(--text-secondary);line-height:1.6;margin-bottom:8px;}
+.eff-title{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px;}
+.eff-row{display:flex;align-items:center;gap:6px;margin-bottom:3px;}
+.eff-label{font-size:10px;color:var(--text-secondary);width:85px;flex-shrink:0;}
+.eff-track{flex:1;height:4px;background:#1a2510;}
+.eff-fill{height:4px;}
+.eff-text{font-size:10px;width:28px;text-align:right;flex-shrink:0;}
+.science-box{margin-top:8px;padding:7px 8px;background:rgba(92,184,92,0.07);border-left:2px solid var(--accent-green);}
+.science-label{font-size:9px;color:var(--accent-green);text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;}
+.science-text{font-size:11px;color:var(--text-secondary);line-height:1.6;}
+.wave-controls{padding:8px 12px;border-top:1px solid var(--panel-border);background:var(--ui-bg);}
+.wave-row{display:flex;gap:6px;margin-bottom:5px;}
+.wave-btn{flex:1;padding:8px;font-family:var(--font-display);font-size:13px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;border:2px solid var(--accent-green);background:transparent;color:var(--accent-green);cursor:pointer;transition:all .15s;}
+.wave-btn:hover:not(:disabled){background:var(--accent-green);color:#0d1a0e;}
+.wave-btn:disabled{opacity:.35;cursor:not-allowed;border-color:var(--text-muted);color:var(--text-muted);}
+.ff-btn{padding:8px 10px;font-family:var(--font-display);font-size:13px;font-weight:500;letter-spacing:.04em;border:2px solid var(--panel-border);background:transparent;color:var(--text-muted);cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0;}
+.ff-btn:hover{border-color:var(--accent-amber);color:var(--accent-amber);}
+.ff-btn.active{border-color:var(--accent-amber);background:rgba(240,168,48,0.15);color:var(--accent-amber);}
+.wave-info{font-size:10px;color:var(--text-muted);text-align:center;min-height:14px;}
+.end-game-btn{width:100%;margin-top:6px;padding:6px;font-family:var(--font-display);font-size:11px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--panel-border);background:transparent;color:var(--text-muted);cursor:pointer;transition:all .15s;}
+.end-game-btn:hover{border-color:var(--accent-red);color:var(--accent-red);}
+.vfx-btn{width:100%;margin-top:4px;padding:5px;font-family:var(--font-display);font-size:10px;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--panel-border);background:transparent;color:var(--text-muted);cursor:pointer;transition:all .15s;}
+.vfx-btn.off{color:#e05050;border-color:#e0505066;}
+.placed-actions{padding:6px 12px;border-top:1px solid var(--panel-border);}
+.placed-actions.hidden{display:none;}
+.action-row{display:flex;gap:5px;}
+.action-btn{flex:1;padding:6px;font-family:var(--font-display);font-size:11px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;border:1px solid var(--panel-border);background:transparent;color:var(--text-secondary);transition:all .15s;}
+.action-btn:hover{background:var(--panel-hover);}
+.action-btn.upgrade{border-color:var(--accent-amber);color:var(--accent-amber);}
+.action-btn.sell{border-color:#c05050;color:#c05050;}
+
+/* END */
+#screen-end{flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.93);position:absolute;inset:0;z-index:100;display:none;}
+.end-box{background:var(--panel-bg);border:1px solid var(--panel-border);padding:34px;width:470px;}
+.end-result{font-family:var(--font-display);font-size:42px;font-weight:600;letter-spacing:.05em;margin-bottom:5px;}
+.end-result.win{color:var(--accent-green);}
+.end-result.lose{color:var(--accent-red);}
+.end-subtitle{font-size:13px;color:var(--text-secondary);margin-bottom:20px;}
+.intercept-summary{margin-bottom:16px;padding:10px 12px;background:var(--ui-bg);border:1px solid var(--panel-border);}
+.intercept-title{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:7px;}
+.intercept-row{display:flex;align-items:center;gap:7px;margin-bottom:3px;font-size:12px;color:var(--text-secondary);}
+.intercept-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.score-breakdown{margin-bottom:20px;}
+.score-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--panel-border);font-size:13px;}
+.score-row:last-child{border-bottom:none;font-weight:600;font-size:15px;}
+.score-label{color:var(--text-secondary);}
+.score-val{color:var(--text-primary);font-family:var(--font-display);}
+.score-val.total{color:var(--accent-amber);}
+.end-btns{display:flex;gap:8px;}
+.end-btn{flex:1;padding:10px;font-family:var(--font-display);font-size:13px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border:1px solid var(--panel-border);background:transparent;color:var(--text-secondary);transition:all .15s;}
+.end-btn:hover{background:var(--panel-hover);}
+.end-btn.primary{border-color:var(--accent-green);color:var(--accent-green);}
+.end-btn.primary:hover{background:rgba(92,184,92,0.13);}
+
+/* LEADERBOARD */
+#screen-leaderboard{flex-direction:column;align-items:center;background:#0d1117;overflow-y:auto;padding:28px 16px;}
+.lb-wrap{width:100%;max-width:820px;}
+.lb-header{text-align:center;margin-bottom:24px;}
+.lb-header h1{font-family:var(--font-display);font-size:34px;color:var(--text-primary);letter-spacing:.05em;margin-bottom:7px;}
+.lb-header p{font-size:14px;color:var(--text-secondary);}
+.lb-tabs{display:flex;gap:5px;margin-bottom:20px;border-bottom:1px solid var(--panel-border);padding-bottom:10px;}
+.lb-tab{font-family:var(--font-display);font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:7px 18px;border:1px solid var(--panel-border);background:transparent;color:var(--text-secondary);cursor:pointer;transition:all .15s;}
+.lb-tab:hover{background:var(--panel-hover);}
+.lb-tab.on{border-color:var(--accent-amber);color:var(--accent-amber);background:rgba(240,168,48,0.07);}
+.lb-table{width:100%;border-collapse:collapse;margin-bottom:24px;}
+.lb-table th{font-family:var(--font-display);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);padding:8px 12px;border-bottom:1px solid var(--panel-border);text-align:left;}
+.lb-table th.num{text-align:right;}
+.lb-table td{padding:9px 12px;border-bottom:1px solid var(--panel-border);font-size:13px;color:var(--text-secondary);}
+.lb-table td.num{text-align:right;font-family:var(--font-display);color:var(--accent-amber);}
+.lb-table tr:last-child td{border-bottom:none;}
+.lb-table tr.highlight td{color:var(--text-primary);background:rgba(92,184,92,0.06);}
+.lb-rank{font-family:var(--font-display);font-size:16px;color:var(--text-muted);}
+.lb-rank.gold{color:#f0c030;}
+.lb-rank.silver{color:#b0b8c8;}
+.lb-rank.bronze{color:#c4893a;}
+.lb-empty{text-align:center;padding:40px;color:var(--text-muted);font-size:13px;}
+.lb-nav{display:flex;gap:8px;justify-content:center;}
+
+/* SHARED OVERLAYS */
+#wave-banner{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:var(--font-display);font-size:clamp(24px,4vw,46px);font-weight:600;color:var(--text-primary);letter-spacing:.1em;text-align:center;pointer-events:none;opacity:0;transition:opacity .4s;z-index:10;text-shadow:0 2px 20px rgba(0,0,0,0.9);}
+#wave-banner.show{opacity:1;}
+#earn-pop{position:absolute;font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--accent-amber);pointer-events:none;opacity:0;transition:opacity .25s;z-index:15;text-shadow:0 1px 4px rgba(0,0,0,0.9);}
+#earn-pop.show{opacity:1;}
+#notif{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel-bg);border:1px solid var(--panel-border);padding:6px 14px;font-size:12px;color:var(--text-primary);pointer-events:none;opacity:0;transition:opacity .3s;z-index:20;white-space:nowrap;}
+#notif.show{opacity:1;}
+#canvas-container.placing{cursor:crosshair;}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--panel-border);}
+</style>
+</head>
+<body>
+
+<!-- TITLE -->
+<div id="screen-title" class="screen active">
+  <div class="title-content">
+    <div class="title-eyebrow">10th Grade STEM Engineering</div>
+    <div class="title-main">Sediment<br><span>Defender</span></div>
+    <div class="title-sub">Deploy real green infrastructure to protect a watershed from construction runoff. Every tower is a Best Management Practice used by civil engineers today.</div>
+    <button class="title-btn" onclick="showScreen('player')">Begin Mission</button>
+  </div>
+</div>
+
+<!-- PLAYER SELECT -->
+<div id="screen-player" class="screen">
+  <div class="select-box">
+    <h2>Who's Playing?</h2>
+    <p>Select your class period, then choose your name.</p>
+    <select class="period-select" id="period-select" onchange="loadRoster()">
+      <option value="">— Select your period —</option>
+      <option value="p1">1st Period</option>
+      <option value="p2">2nd Period</option>
+      <option value="p3">3rd Period</option>
+      <option value="p4">4th Period</option>
+    </select>
+    <div class="name-list" id="name-list"></div>
+    <button class="continue-btn" id="continue-btn" onclick="showScreen('instructions')" disabled>Continue to Briefing →</button>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:10px;text-align:center;">Roster loaded from class database.</p>
+  </div>
+</div>
+
+<!-- MAP SELECT -->
+<div id="screen-mapselect" class="screen">
+  <div class="mapselect-title">Select Mission</div>
+  <div class="mapselect-sub">Each map is a different land development scenario with unique challenges.</div>
+  <div class="map-cards">
+
+    <div class="map-card">
+      <div class="map-card-diff" style="color:#5cb85c;">Easy</div>
+      <div class="map-card-num">01</div>
+      <div class="map-card-name">The Cleared Slope</div>
+      <div class="map-card-desc">A forested hillside cleared for development. Single flow path with 5 sharp turns. Learn the BMP system and build your economy.</div>
+      <div class="map-card-tags">
+        <span class="map-tag">Single path</span>
+        <span class="map-tag">20 waves</span>
+        <span class="map-tag">All BMPs</span>
+      </div>
+      <div class="map-card-footer">Starting budget: <span>$100</span> &nbsp;·&nbsp; River HP: <span>100</span></div>
+      <button class="map-card-select" onclick="selectMap(1)">Deploy →</button>
+    </div>
+
+    <div class="map-card">
+      <div class="map-card-diff" style="color:#f0a830;">Medium</div>
+      <div class="map-card-num">02</div>
+      <div class="map-card-name">The Branching Watershed</div>
+      <div class="map-card-desc">Two tributary streams merge at a central choke point. A second path opens mid-game. Agricultural branch carries nutrients; construction branch carries sediment.</div>
+      <div class="map-card-tags">
+        <span class="map-tag">Two paths</span>
+        <span class="map-tag">20 waves</span>
+        <span class="map-tag">Path unlocks Wave 9</span>
+      </div>
+      <div class="map-card-footer">Starting budget: <span>$150</span> &nbsp;·&nbsp; River HP: <span>100</span></div>
+      <button class="map-card-select" onclick="selectMap(2)">Deploy →</button>
+    </div>
+
+    <div class="map-card">
+      <div class="map-card-diff" style="color:#e05050;">Hard</div>
+      <div class="map-card-num">03</div>
+      <div class="map-card-name">The Detention Pond Failure</div>
+      <div class="map-card-desc">A failed stormwater detention pond at center-map is breaching its embankment. Contaminated water radiates outward in all directions. New breach channels open every few waves — you never know which side fails next.</div>
+      <div class="map-card-tags">
+        <span class="map-tag">8 breach channels</span>
+        <span class="map-tag">20 waves</span>
+        <span class="map-tag">Random openings</span>
+      </div>
+      <div class="map-card-footer">Starting budget: <span>$350</span> &nbsp;·&nbsp; River HP: <span>75</span></div>
+      <button class="map-card-select" onclick="selectMap(3)">Deploy →</button>
+    </div>
+
+  </div>
+  <div class="mapselect-actions">
+    <button class="instr-nav-btn" onclick="showScreen('instructions')">← Back to Briefing</button>
+    <button class="instr-nav-btn" onclick="showScreen('leaderboard')" style="border-color:var(--accent-amber);color:var(--accent-amber);">🏆 Leaderboard</button>
+  </div>
+</div>
+
+<!-- INSTRUCTIONS -->
+<div id="screen-instructions" class="screen">
+  <div class="instr-wrap">
+    <div class="instr-header">
+      <h1>Field Briefing</h1>
+      <p>Study your tools and understand what you're up against. Every BMP tower and every pollutant is real engineering and real science used in Georgia today.</p>
+    </div>
+    <div class="instr-tabs">
+      <button class="instr-tab on" onclick="instrTab(0)">BMP Towers</button>
+      <button class="instr-tab" onclick="instrTab(1)">Sediment Types</button>
+      <button class="instr-tab" onclick="instrTab(2)">How to Play</button>
+    </div>
+
+    <!-- TAB 0: TOWERS -->
+    <div class="instr-page on" id="itab-0">
+      <div class="tower-grid" id="tower-instr-grid"></div>
+      <div class="instr-nav">
+        <button class="instr-nav-btn" onclick="showScreen('player')">← Back</button>
+        <button class="instr-nav-btn primary" onclick="instrTab(1)">Sediment Types →</button>
+      </div>
+    </div>
+
+    <!-- TAB 1: SEDIMENT -->
+    <div class="instr-page" id="itab-1">
+      <div class="sed-grid" id="sed-instr-grid"></div>
+      <div class="instr-nav">
+        <button class="instr-nav-btn" onclick="instrTab(0)">← BMP Towers</button>
+        <button class="instr-nav-btn primary" onclick="instrTab(2)">How to Play →</button>
+      </div>
+    </div>
+
+    <!-- TAB 2: HOW TO PLAY -->
+    <div class="instr-page" id="itab-2">
+      <div class="econ-note">
+        <strong>Your mission:</strong> Protect the creek at the bottom of the slope. Runoff flows down the path — place BMP towers to intercept it. You start with only $100 — just enough for 2 silt fences. <strong>You earn money by intercepting particles during waves.</strong> Harder pollutants pay more. Use your earnings to unlock and place more powerful towers. Build smart and build early.
+      </div>
+      <div class="econ-grid">
+        <div class="econ-card"><div class="econ-val">$100</div><div class="econ-label">Starting Budget</div><div class="econ-sub">2 silt fences. New towers unlock slowly — every intercept counts.</div></div>
+        <div class="econ-card"><div class="econ-val">$3–$18</div><div class="econ-label">Per Intercept</div><div class="econ-sub">Earned live during waves. Harder pollutants pay more.</div></div>
+        <div class="econ-card"><div class="econ-val">$30–$220</div><div class="econ-label">Wave Bonus</div><div class="econ-sub">Bonus at end of each wave. Grows each round.</div></div>
+      </div>
+      <div class="econ-note">
+        <strong>Intercept earnings:</strong> Coarse $5 · Fine $3 · Nutrient $8 · Urban $11 · Flash $18 · Aggregate $13 · Turbidity $9<br><br>
+        <strong>Flash Runoff warning:</strong> Flash Runoff carries ALL pollutant types. When intercepted mid-path it releases coarse, fine, nutrient, and urban particles that continue downstream. If it reaches the river unblocked, those secondaries deal extra HP damage too.<br><br>
+        <strong>Fast Forward:</strong> Click ⏩ during a wave to speed up to 2× then 3×. Click again to cycle back to normal. Speed resets between waves.<br><br>
+        <strong>Tower unlocks:</strong> Check Dam $100 earned · Bioswale $280 · Riparian Buffer $500 · Sediment Basin $800 · Wetland $1,300<br><br>
+        <strong>Controls:</strong> Click a tower in the shop (or press 1–6) to select, then click the map to place. Click a placed tower to upgrade or sell. Escape cancels selection.
+      </div>
+      <div class="econ-grid">
+        <div class="econ-card"><div class="econ-val" style="color:#5cb85c;">100 HP</div><div class="econ-label">River Health</div><div class="econ-sub">Each pollutant that reaches the creek costs health. Hit 0 and it's over.</div></div>
+        <div class="econ-card"><div class="econ-val" style="color:#5cb85c;">20 Waves</div><div class="econ-label">Escalating Difficulty</div><div class="econ-sub">Each wave introduces a new threat. Aggregates and turbidity split on death.</div></div>
+        <div class="econ-card"><div class="econ-val" style="color:#5cb85c;">Score</div><div class="econ-label">End Score</div><div class="econ-sub">Health × 10 + Waves × 50 + Budget × 2 + Intercepts × 3</div></div>
+      </div>
+      <div class="instr-nav">
+        <button class="instr-nav-btn" onclick="instrTab(1)">← Sediment Types</button>
+        <button class="instr-nav-btn primary" onclick="showScreen('mapselect')">Choose Map →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LEADERBOARD -->
+<div id="screen-leaderboard" class="screen">
+  <div class="lb-wrap">
+    <div class="lb-header">
+      <h1>Leaderboard</h1>
+      <p>Top 25 scores by map — shared across all class periods in real time.</p>
+    </div>
+    <div class="lb-tabs">
+      <button class="lb-tab on" onclick="lbTab(1)">Map 1 — The Cleared Slope</button>
+      <button class="lb-tab" onclick="lbTab(2)">Map 2 — Branching Watershed</button>
+      <button class="lb-tab" onclick="lbTab(3)">Map 3 — Detention Pond</button>
+    </div>
+    <div id="lb-content"></div>
+    <div class="lb-nav">
+      <button class="instr-nav-btn" onclick="showScreen('mapselect')">← Choose Map</button>
+      <button class="instr-nav-btn" onclick="showScreen('title')">Main Menu</button>
+    </div>
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="screen-game" class="screen">
+  <div id="canvas-container">
+    <canvas id="canvas-static"></canvas>
+    <canvas id="canvas-dynamic"></canvas>
+    <div id="wave-banner"></div>
+    <div id="earn-pop"></div>
+    <div id="notif"></div>
+  </div>
+  <div id="side-panel">
+    <div class="panel-hud">
+      <div class="hud-row"><span class="hud-label">River Health</span><span class="hud-val" id="hud-hp">100</span></div>
+      <div class="health-bar-wrap"><div class="health-bar" id="health-bar" style="width:100%;"></div></div>
+      <div class="hud-row"><span class="hud-label">Budget</span><span class="hud-val money" id="hud-money">$100</span></div>
+      <div class="hud-row"><span class="hud-label">Wave</span><span class="hud-val wave" id="hud-wave">1 / 10</span></div>
+      <div class="earn-flash" id="earn-flash"></div>
+    </div>
+    <div class="panel-section-title">BMPs — click to select</div>
+    <div class="tower-shop" id="tower-shop"></div>
+    <div class="placed-actions hidden" id="placed-actions">
+      <div class="action-row">
+        <button class="action-btn upgrade" id="upgrade-btn" onclick="upgradeTower()">Upgrade</button>
+        <button class="action-btn sell" onclick="sellTower()">Sell</button>
+      </div>
+    </div>
+    <div class="tooltip-panel hidden" id="tooltip-panel">
+      <div class="tooltip-name" id="tt-name"></div>
+      <div class="tooltip-desc" id="tt-desc"></div>
+      <div class="eff-title">Effectiveness against:</div>
+      <div id="tt-eff"></div>
+      <div class="science-box">
+        <div class="science-label">Real-world science</div>
+        <div class="science-text" id="tt-science"></div>
+      </div>
+    </div>
+    <div class="wave-controls">
+      <div class="wave-row">
+        <button class="wave-btn" id="wave-btn" onclick="startWave()">Start Wave 1</button>
+        <button class="ff-btn" id="ff-btn" onclick="toggleFF()" title="Fast Forward">&#9654;&#9654;</button>
+      </div>
+      <div class="wave-info" id="wave-info">Place 2 silt fences, then start!</div>
+      <button class="end-game-btn" onclick="endGame()">End Game</button>
+      <button class="vfx-btn" id="vfx-btn" onclick="toggleVFX()">Effects: ON</button>
+    </div>
+  </div>
+</div>
+
+<!-- END -->
+<div id="screen-end" style="display:none;position:absolute;inset:0;z-index:100;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.93);">
+  <div class="end-box">
+    <div class="end-result" id="end-result"></div>
+    <div class="end-subtitle" id="end-subtitle"></div>
+    <div class="intercept-summary" id="intercept-summary"></div>
+    <div class="score-breakdown" id="score-breakdown"></div>
+    <div class="end-btns">
+      <button class="end-btn" onclick="showScreen('leaderboard')">Leaderboard</button>
+      <button class="end-btn primary" onclick="showScreen('mapselect')">Play Again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+//  TOWER DATA
+// ================================================================
+const TOWERS = {
+  silt_fence:{
+    id:'silt_fence',name:'Silt Fence',cost:45,key:'1',unlockAt:0,
+    attackType:'barrier',  // passive — slows and damages all in range continuously
+    color:'#c4973a',borderColor:'#8B6914',range:62,
+    damage:{coarse:80,fine:15,nutrient:0,urban:10,flash:5,aggregate:70,turbidity:20},
+    upgradeCost:90,upgradeDesc:'Reinforced + sediment basin retrofit',
+    upgradeWhat:['Tier 1: Reinforced fabric — +40% effectiveness vs coarse, survives heavy rain','Tier 2: Sediment basin retrofit — adds fine sediment capture, area expands'],
+    desc:'Woven geotextile fabric staked downslope. Works like a coffee filter — stops particles but lets dissolved chemicals pass right through. The most common and cheapest construction site BMP.',
+    science:'Silt fences trap sediment by physical filtration. Water molecules and dissolved nutrients pass straight through the fabric — this is why nutrients and oils bypass it completely. Only effective for particles physically large enough to be caught.',
+    draw(ctx,x,y,sz,tier){
+      const w=sz*.88,h=sz*.46;ctx.fillStyle=this.color+'22';ctx.fillRect(x-w/2,y-h/2,w,h);
+      ctx.strokeStyle=tier>=1?'#e0b84a':this.color;ctx.lineWidth=tier>=1?2.4:1.8;ctx.strokeRect(x-w/2,y-h/2,w,h);
+      for(let i=0;i<3;i++){const px=x-w/2+(w/2)*i;ctx.strokeStyle=this.borderColor;ctx.lineWidth=1.8;ctx.beginPath();ctx.moveTo(px,y-h/2-3);ctx.lineTo(px,y+h/2+3);ctx.stroke();}
+      ctx.fillStyle=this.color;ctx.font='bold 9px Oswald';ctx.textAlign='center';ctx.fillText('SF',x,y+h/2+13);
+    }
+  },
+  check_dam:{
+    id:'check_dam',name:'Check Dam',cost:100,key:'2',unlockAt:100,
+    attackType:'slow',     // slows enemies strongly, deals moderate damage
+    color:'#7c6fad',borderColor:'#534AB7',range:56,
+    damage:{coarse:85,fine:50,nutrient:0,urban:15,flash:55,aggregate:85,turbidity:60},
+    upgradeCost:140,upgradeDesc:'Rock rip-rap — survives flash floods',
+    upgradeWhat:['Tier 1: Rock rip-rap — survives flash floods, slow effect +30%, enemies back up','Tier 2: Gabion weir — permanent structure, slows ALL types including flash, wildlife bonus'],
+    desc:'A barrier across a drainage channel built from rock or straw. Slows water velocity so particles settle. Must be placed near the flow channel — useless on dry ground.',
+    science:'Check dams apply Stokes\' Law: heavier particles sink faster in slow water. Creating a pool reduces velocity so gravity can pull particles down. Fine clay stays suspended even slowly — which is why check dams alone can\'t achieve full removal.',
+    draw(ctx,x,y,sz,tier){
+      ctx.fillStyle=this.color+'1e';ctx.beginPath();ctx.moveTo(x-sz*.46,y+sz*.29);ctx.lineTo(x,y-sz*.33);ctx.lineTo(x+sz*.46,y+sz*.29);ctx.closePath();ctx.fill();
+      ctx.strokeStyle=tier>=1?'#a09ce8':this.borderColor;ctx.lineWidth=1.8;ctx.beginPath();ctx.moveTo(x-sz*.46,y+sz*.29);ctx.lineTo(x,y-sz*.33);ctx.lineTo(x+sz*.46,y+sz*.29);ctx.closePath();ctx.stroke();
+      ctx.fillStyle=this.color;ctx.font='bold 9px Oswald';ctx.textAlign='center';ctx.fillText('CD',x,y+sz*.47);
+    }
+  },
+  bioswale:{
+    id:'bioswale',name:'Bioswale',cost:180,key:'3',unlockAt:280,
+    attackType:'targeted', // focuses on single nearest enemy, higher per-target damage
+    color:'#4a9a3a',borderColor:'#2d7a1d',range:78,
+    damage:{coarse:75,fine:80,nutrient:65,urban:55,flash:25,aggregate:65,turbidity:80},
+    upgradeCost:240,upgradeDesc:'Native plants — deep roots, +60% infiltration',
+    upgradeWhat:['Tier 1: Native plant mix — deep roots increase infiltration 60%, slows targets','Tier 2: Bioretention cell — engineered soil media, captures heavy metals and phosphorus, area expands'],
+    desc:'A vegetated channel that slows, filters, and infiltrates runoff. Plant roots and soil microbes absorb dissolved nitrogen and phosphorus — pollutants physical barriers miss entirely.',
+    science:'Three removal mechanisms: soil filtration removes particles; plant roots uptake nitrogen and phosphorus for growth; soil chemistry adsorbs metals. The living biology does chemical work no physical barrier can replicate.',
+    draw(ctx,x,y,sz,tier){
+      ctx.fillStyle='#1a3a10';ctx.beginPath();ctx.ellipse(x,y+sz*.07,sz*.46,sz*.21,0,0,Math.PI*2);ctx.fill();
+      const n=tier>=1?5:3;
+      for(let i=0;i<n;i++){const px=x-sz*.28+i*(sz*.56/(n-1));const ph=sz*(.27+Math.sin(i*1.3)*.07);ctx.strokeStyle=i%2===0?this.borderColor:this.color;ctx.lineWidth=1.8;ctx.beginPath();ctx.moveTo(px,y+sz*.07);ctx.lineTo(px,y-ph);ctx.stroke();ctx.beginPath();ctx.arc(px,y-ph,3.2,0,Math.PI*2);ctx.fillStyle=this.color;ctx.fill();}
+      ctx.fillStyle=this.color;ctx.font='bold 9px Oswald';ctx.textAlign='center';ctx.fillText('BW',x,y+sz*.42);
+    }
+  },
+  riparian_buffer:{
+    id:'riparian_buffer',name:'Riparian Buffer',cost:260,key:'4',unlockAt:500,
+    attackType:'barrier',  // passive area — continuous damage + mild slow via root network
+    color:'#1a9e65',borderColor:'#0f6e45',range:98,
+    damage:{coarse:80,fine:75,nutrient:80,urban:35,flash:45,aggregate:75,turbidity:70},
+    upgradeCost:280,upgradeDesc:'Mature canopy — range expands, bank erosion blocked',
+    upgradeWhat:['Tier 1: Mature canopy — range doubles, rainfall interception added, slows enemies entering','Tier 2: Floodplain restoration — reconnected floodplain absorbs full flash surges, synergy bonus'],
+    desc:'Native trees along the streambank. Roots grip soil — one mature tree holds tons of bank in place. Intercepts overland flow and absorbs nutrients. The only BMP that also prevents bank erosion.',
+    science:'Tree roots extend 10–15 feet laterally and bind thousands of pounds of streambank. Studies show 35–65% nitrogen reduction with a 50-foot buffer. However, oils and metals require chemical or microbial processes trees don\'t perform.',
+    draw(ctx,x,y,sz,tier){
+      const h=tier>=1?sz*.56:sz*.43;
+      [{px:x-sz*.26,s:.72},{px:x,s:1},{px:x+sz*.26,s:.72}].forEach(t=>{
+        ctx.strokeStyle=this.borderColor;ctx.lineWidth=tier>=1?2.4:1.8;ctx.beginPath();ctx.moveTo(t.px,y+sz*.19);ctx.lineTo(t.px,y-h*t.s+sz*.07);ctx.stroke();
+        ctx.fillStyle=this.color;ctx.beginPath();ctx.arc(t.px,y-h*t.s+sz*.04,sz*.16*t.s,0,Math.PI*2);ctx.fill();ctx.strokeStyle=this.borderColor;ctx.lineWidth=1;ctx.stroke();
+      });
+      ctx.fillStyle=this.color;ctx.font='bold 9px Oswald';ctx.textAlign='center';ctx.fillText('RB',x,y+sz*.43);
+    }
+  },
+  sediment_basin:{
+    id:'sediment_basin',name:'Sediment Basin',cost:300,key:'5',unlockAt:800,
+    attackType:'pulse',    // fires a settling burst every 3s hitting all enemies in range at once
+    pulseInterval:3.0,
+    color:'#7a7a8a',borderColor:'#5a5a6a',range:88,
+    damage:{coarse:95,fine:70,nutrient:20,urban:15,flash:85,aggregate:95,turbidity:75},
+    upgradeCost:260,upgradeDesc:'Outlet structure — handles 100-yr storm volumes',
+    upgradeWhat:['Tier 1: Outlet structure — engineered for 100-yr storms, pulse fires 25% faster','Tier 2: Emergency spillway — max capacity doubled, pulse hits ALL enemy types including dissolved'],
+    desc:'An engineered impoundment storing runoff so sediment settles. Required by Georgia law on construction sites over 1 acre. Handles huge volumes but must be cleaned regularly or it stops working.',
+    science:'Designed using hydraulic residence time — engineers calculate how long water must sit for particles to settle (Stokes\' Law). Ineffective against dissolved pollutants because settling removes particles only, not molecules.',
+    draw(ctx,x,y,sz,tier){
+      ctx.fillStyle='#2a2a3a';ctx.fillRect(x-sz*.43,y-sz*.23,sz*.86,sz*.46);
+      ctx.strokeStyle=tier>=1?'#aaaacc':this.borderColor;ctx.lineWidth=1.8;ctx.strokeRect(x-sz*.43,y-sz*.23,sz*.86,sz*.46);
+      ctx.fillStyle='#3a5a8a2e';ctx.fillRect(x-sz*.37,y-sz*.08,sz*.74,sz*.27);
+      for(let i=0;i<4;i++){ctx.fillStyle=this.color+'77';ctx.beginPath();ctx.arc(x-sz*.2+i*sz*.14,y+sz*.04,2.3,0,Math.PI*2);ctx.fill();}
+      ctx.fillStyle=this.color;ctx.font='bold 9px Oswald';ctx.textAlign='center';ctx.fillText('SB',x,y+sz*.43);
+    }
+  },
+  wetland:{
+    id:'wetland',name:'Constructed Wetland',cost:400,key:'6',unlockAt:1300,
+    attackType:'pulse',    // biological treatment pulse every 4s — largest area, strongest multi-type damage
+    pulseInterval:4.0,
+    color:'#2a8ab5',borderColor:'#1a5a85',range:118,
+    damage:{coarse:80,fine:80,nutrient:90,urban:75,flash:55,aggregate:85,turbidity:90},
+    upgradeCost:380,upgradeDesc:'Cattail establishment — denitrification + oil breakdown',
+    upgradeWhat:['Tier 1: Cattail establishment — denitrification active, nitrogen removal doubles, wildlife counter','Tier 2: Treatment train — connects to adjacent bioswales, nearby towers get +25% effectiveness'],
+    desc:'An engineered shallow water body with aquatic plants. The most powerful BMP — removes pollutants through settling, plant uptake, AND bacterial decomposition simultaneously. The only BMP that treats oils.',
+    science:'Wetland bacteria perform denitrification, converting dissolved nitrogen to harmless N₂ gas. Other bacteria break down oil hydrocarbons as food. Metals bind to organic sediment and are buried permanently. Biology doing chemistry.',
+    draw(ctx,x,y,sz,tier){
+      ctx.fillStyle='#1a4a6a2e';ctx.beginPath();ctx.ellipse(x,y+sz*.04,sz*.49,sz*.25,0,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle=this.borderColor;ctx.lineWidth=1.3;ctx.beginPath();ctx.ellipse(x,y+sz*.04,sz*.49,sz*.25,0,0,Math.PI*2);ctx.stroke();
+      const r=tier>=1?6:4;
+      for(let i=0;i<r;i++){const px=x-sz*.32+i*(sz*.64/(r-1));const ph=sz*(.23+Math.sin(i*.8)*.06);ctx.strokeStyle=i%2===0?'#2d8040':'#1a6a30';ctx.lineWidth=1.8;ctx.beginPath();ctx.moveTo(px,y+sz*.07);ctx.lineTo(px,y-ph);ctx.stroke();ctx.fillStyle='#3a9050';ctx.beginPath();ctx.ellipse(px,y-ph,2.3,5,0,0,Math.PI*2);ctx.fill();}
+      ctx.fillStyle=this.color;ctx.font='bold 9px Oswald';ctx.textAlign='center';ctx.fillText('CW',x,y+sz*.47);
+    }
+  }
+};
+
+const ENEMY_TYPES = {
+  // Coarse sediment — chunky brown square/boulder, slow and tanky
+  coarse:{
+    id:'coarse',name:'Coarse Sediment',color:'#c4893a',outline:'#8B5e14',
+    hp:60,speed:.6,dmg:8,size:11,label:'C',
+    draw(ctx,x,y,sz){
+      // Jagged boulder shape
+      ctx.fillStyle=this.color;
+      ctx.beginPath();
+      ctx.moveTo(x-sz,    y-sz*.4);
+      ctx.lineTo(x-sz*.4, y-sz);
+      ctx.lineTo(x+sz*.3, y-sz);
+      ctx.lineTo(x+sz,    y-sz*.3);
+      ctx.lineTo(x+sz*.8, y+sz*.5);
+      ctx.lineTo(x+sz*.2, y+sz);
+      ctx.lineTo(x-sz*.5, y+sz);
+      ctx.lineTo(x-sz,    y+sz*.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle=this.outline;ctx.lineWidth=1.5;ctx.stroke();
+    }
+  },
+  // Fine sediment — small grey teardrop/oval, fast and slippery
+  fine:{
+    id:'fine',name:'Fine Sediment',color:'#b0b0c8',outline:'#7070a0',
+    hp:28,speed:1.1,dmg:5,size:7,label:'F',
+    draw(ctx,x,y,sz){
+      // Teardrop pointing in travel direction
+      ctx.fillStyle=this.color;
+      ctx.beginPath();
+      ctx.ellipse(x,y,sz*.7,sz,0,0,Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle=this.outline;ctx.lineWidth=1;ctx.stroke();
+      // Inner shimmer dot
+      ctx.fillStyle='#ffffff44';
+      ctx.beginPath();ctx.arc(x-sz*.2,y-sz*.25,sz*.22,0,Math.PI*2);ctx.fill();
+    }
+  },
+  // Nutrient plume — green diamond/rhombus, medium
+  nutrient:{
+    id:'nutrient',name:'Nutrient Plume',color:'#52c45a',outline:'#2a8a32',
+    hp:42,speed:.85,dmg:6,size:9,label:'N',
+    draw(ctx,x,y,sz){
+      // Diamond shape — distinct from all others
+      ctx.fillStyle=this.color;
+      ctx.beginPath();
+      ctx.moveTo(x,       y-sz);    // top
+      ctx.lineTo(x+sz*.85,y);       // right
+      ctx.lineTo(x,       y+sz);    // bottom
+      ctx.lineTo(x-sz*.85,y);       // left
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle=this.outline;ctx.lineWidth=1.5;ctx.stroke();
+      // Center glow dot
+      ctx.fillStyle='#aaffaa55';
+      ctx.beginPath();ctx.arc(x,y,sz*.3,0,Math.PI*2);ctx.fill();
+    }
+  },
+  // Urban runoff — dark grey hexagon, medium-fast
+  urban:{
+    id:'urban',name:'Urban Runoff',color:'#6060a0',outline:'#303068',
+    hp:48,speed:1.0,dmg:10,size:11,label:'U',
+    draw(ctx,x,y,sz){
+      // Hexagon
+      ctx.fillStyle=this.color;
+      ctx.beginPath();
+      for(let i=0;i<6;i++){
+        const a=Math.PI/3*i - Math.PI/6;
+        i===0 ? ctx.moveTo(x+sz*Math.cos(a),y+sz*Math.sin(a))
+              : ctx.lineTo(x+sz*Math.cos(a),y+sz*Math.sin(a));
+      }
+      ctx.closePath();ctx.fill();
+      ctx.strokeStyle=this.outline;ctx.lineWidth=1.5;ctx.stroke();
+      // Oil sheen — small offset ellipse
+      ctx.fillStyle='#aa88ff33';
+      ctx.beginPath();ctx.ellipse(x+sz*.2,y-sz*.2,sz*.4,sz*.25,0.4,0,Math.PI*2);ctx.fill();
+    }
+  },
+  // Flash runoff — bright blue lightning-bolt/arrow chevron, fast and big
+  // Carries ALL pollutant types — when destroyed or reaching river, releases 1 of each
+  // Real science: flash floods are high-energy events that pick up and transport every
+  // pollutant type simultaneously — coarse sediment, fine particles, dissolved nutrients,
+  // urban chemicals — the entire non-point-source pollution load in one violent pulse
+  flash:{
+    id:'flash',name:'Flash Runoff',color:'#3a8ae8',outline:'#1a4ab0',
+    hp:78,speed:1.5,dmg:14,size:13,label:'!',
+    // Multi-release: spawns 1 of each type on death AND if it reaches the river
+    splitsInto:'multi',
+    splitPayload:['coarse','coarse','coarse','coarse','fine','fine','fine','fine','nutrient','nutrient','nutrient','nutrient','urban','urban','urban','urban'],
+    draw(ctx,x,y,sz){
+      ctx.fillStyle=this.color;
+      ctx.beginPath();
+      ctx.moveTo(x,        y+sz);
+      ctx.lineTo(x-sz*.9,  y-sz*.2);
+      ctx.lineTo(x-sz*.35, y-sz*.2);
+      ctx.lineTo(x-sz*.35, y-sz);
+      ctx.lineTo(x+sz*.35, y-sz);
+      ctx.lineTo(x+sz*.35, y-sz*.2);
+      ctx.lineTo(x+sz*.9,  y-sz*.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle=this.outline;ctx.lineWidth=1.8;ctx.stroke();
+      ctx.strokeStyle='#ffffff55';ctx.lineWidth=1.2;
+      ctx.beginPath();ctx.moveTo(x-sz*.15,y-sz*.8);ctx.lineTo(x-sz*.15,y+sz*.3);ctx.stroke();
+      // Small particle indicators showing what it carries
+      const colors=['#c4893a','#b0b0c8','#52c45a','#6060a0'];
+      colors.forEach((c,i)=>{
+        const angle=(i/4)*Math.PI*2-Math.PI/2;
+        ctx.fillStyle=c;
+        ctx.beginPath();ctx.arc(x+sz*.55*Math.cos(angle),y+sz*.55*Math.sin(angle),sz*.18,0,Math.PI*2);ctx.fill();
+      });
+    }
+  },
+  // Sediment aggregate — large dark-brown cluster, slow, splits into 3 coarse on death
+  // Real science: clay particles flocculate into aggregates in water; check dams/bioswales
+  // break up flow energy and disaggregate them back into individual particles
+  aggregate:{
+    id:'aggregate',name:'Sediment Aggregate',color:'#7a4010',outline:'#4a2005',
+    hp:120,speed:.45,dmg:12,size:16,label:'AG',
+    splitsInto:'coarse',splitCount:3,
+    draw(ctx,x,y,sz){
+      // Large rough cluster — main mass + 3 attached lumps
+      ctx.fillStyle=this.color;
+      ctx.beginPath();ctx.arc(x,y,sz,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle=this.outline;ctx.lineWidth=2;ctx.stroke();
+      // Attached sub-lumps
+      [[x-sz*.7,y-sz*.5,sz*.45],[x+sz*.65,y-sz*.4,sz*.4],[x+sz*.1,y+sz*.75,sz*.42]].forEach(([cx,cy,cr])=>{
+        ctx.fillStyle=this.color;ctx.beginPath();ctx.arc(cx,cy,cr,0,Math.PI*2);ctx.fill();
+        ctx.strokeStyle=this.outline;ctx.lineWidth=1.5;ctx.stroke();
+      });
+      // Texture — embedded pebble dots
+      ctx.fillStyle=this.outline+'aa';
+      [[x-sz*.3,y+sz*.15,sz*.12],[x+sz*.25,y-sz*.1,sz*.1],[x,y+sz*.4,sz*.11]].forEach(([cx,cy,cr])=>{
+        ctx.beginPath();ctx.arc(cx,cy,cr,0,Math.PI*2);ctx.fill();
+      });
+    }
+  },
+  // Turbidity plume — large murky grey-brown oval, medium speed, splits into 4 fine on death
+  // Real science: construction sites create high-turbidity plumes (suspended fine solids);
+  // when slowed by vegetation or settling basins the load disaggregates into individual fine particles
+  turbidity:{
+    id:'turbidity',name:'Turbidity Plume',color:'#8a7a60',outline:'#5a4a30',
+    hp:90,speed:.7,dmg:9,size:14,label:'TB',
+    splitsInto:'fine',splitCount:4,
+    draw(ctx,x,y,sz){
+      // Amorphous blob — irregular ellipse with wispy edges
+      ctx.fillStyle=this.color+'cc';
+      ctx.beginPath();ctx.ellipse(x,y,sz*1.1,sz*.8,0.3,0,Math.PI*2);ctx.fill();
+      // Outer haze ring
+      ctx.fillStyle=this.color+'44';
+      ctx.beginPath();ctx.ellipse(x,y,sz*1.45,sz*1.1,0.3,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle=this.outline;ctx.lineWidth=1.2;
+      ctx.beginPath();ctx.ellipse(x,y,sz*1.1,sz*.8,0.3,0,Math.PI*2);ctx.stroke();
+      // Suspended particle dots inside
+      ctx.fillStyle=this.outline+'cc';
+      [[x-sz*.4,y-sz*.1,sz*.1],[x+sz*.3,y+sz*.2,sz*.09],[x,y-sz*.25,sz*.08],[x+sz*.5,y-sz*.1,sz*.07]].forEach(([cx,cy,cr])=>{
+        ctx.beginPath();ctx.arc(cx,cy,cr,0,Math.PI*2);ctx.fill();
+      });
+    }
+  }
+};
+
+const INTERCEPT_REWARD={coarse:5,fine:3,nutrient:8,urban:11,flash:18,aggregate:13,turbidity:9};
+
+// Wave bonus grows each round
+const WAVE_BONUS=[0,30,34,38,43,48,54,60,66,72,80,88,96,106,116,128,140,155,170,188,220];
+
+// 20-wave progressive difficulty — slow ramp, longer rounds, each wave introduces or intensifies one thing
+const WAVES=[
+  // Early game (1-5): coarse and fine, learn placement
+  {label:'Coarse Sediment Only',
+   enemies:[{type:'coarse',count:14,interval:1800}]},
+  {label:'More Coarse — Faster',
+   enemies:[{type:'coarse',count:18,interval:1500}]},
+  {label:'Fine Sediment Joins',
+   enemies:[{type:'coarse',count:16,interval:1400},{type:'fine',count:10,interval:1600}]},
+  {label:'Coarse & Fine — Volume Up',
+   enemies:[{type:'coarse',count:18,interval:1300},{type:'fine',count:14,interval:1400}]},
+  {label:'Aggregates Forming',
+   enemies:[{type:'coarse',count:16,interval:1300},{type:'fine',count:12,interval:1400},{type:'aggregate',count:4,interval:2400}]},
+  // Mid-early (6-9): aggregates, turbidity, nutrients introduced one at a time
+  {label:'Aggregates — Heavier Load',
+   enemies:[{type:'coarse',count:18,interval:1200},{type:'fine',count:14,interval:1300},{type:'aggregate',count:6,interval:2000}]},
+  {label:'Turbidity Plumes Detected',
+   enemies:[{type:'turbidity',count:5,interval:1800},{type:'coarse',count:16,interval:1200},{type:'fine',count:12,interval:1300},{type:'aggregate',count:4,interval:2200}]},
+  {label:'Turbidity Rising',
+   enemies:[{type:'turbidity',count:8,interval:1500},{type:'coarse',count:16,interval:1100},{type:'fine',count:14,interval:1200},{type:'aggregate',count:5,interval:2000}]},
+  {label:'Nutrient Plumes Detected',
+   enemies:[{type:'nutrient',count:8,interval:1500},{type:'turbidity',count:7,interval:1600},{type:'coarse',count:12,interval:1200},{type:'fine',count:12,interval:1300}]},
+  // Mid game (10-13): nutrients established, urban joins
+  {label:'Nutrient Surge',
+   enemies:[{type:'nutrient',count:14,interval:1200},{type:'turbidity',count:8,interval:1400},{type:'aggregate',count:6,interval:1900},{type:'fine',count:12,interval:1200}]},
+  {label:'Urban Runoff Detected',
+   enemies:[{type:'urban',count:6,interval:1300},{type:'nutrient',count:12,interval:1100},{type:'turbidity',count:7,interval:1400},{type:'coarse',count:12,interval:1100}]},
+  {label:'Urban Runoff Surge',
+   enemies:[{type:'urban',count:10,interval:1100},{type:'nutrient',count:12,interval:1100},{type:'turbidity',count:8,interval:1300},{type:'fine',count:14,interval:1100}]},
+  {label:'Heavy Mixed Load',
+   enemies:[{type:'aggregate',count:8,interval:1700},{type:'turbidity',count:8,interval:1500},{type:'urban',count:10,interval:1000},{type:'coarse',count:14,interval:1000}]},
+  // Late game (14-17): flash introduced, pressure builds
+  {label:'Storm Warning — Flash Detected',
+   enemies:[{type:'flash',count:3,interval:1600},{type:'urban',count:12,interval:950},{type:'nutrient',count:14,interval:950},{type:'fine',count:14,interval:1000}]},
+  {label:'Flash Runoff Surge',
+   enemies:[{type:'flash',count:5,interval:1300},{type:'urban',count:12,interval:900},{type:'nutrient',count:12,interval:900},{type:'aggregate',count:6,interval:1600}]},
+  {label:'All Threats — Rising Pressure',
+   enemies:[{type:'flash',count:6,interval:1100},{type:'turbidity',count:8,interval:1200},{type:'urban',count:12,interval:880},{type:'nutrient',count:12,interval:880},{type:'aggregate',count:5,interval:1500}]},
+  {label:'Maximum Volume',
+   enemies:[{type:'flash',count:7,interval:950},{type:'urban',count:14,interval:850},{type:'aggregate',count:8,interval:1400},{type:'turbidity',count:8,interval:1200},{type:'nutrient',count:12,interval:850}]},
+  // Final push (18-20): everything at high pressure
+  {label:'Critical Overload',
+   enemies:[{type:'flash',count:8,interval:850},{type:'urban',count:15,interval:800},{type:'aggregate',count:9,interval:1200},{type:'turbidity',count:9,interval:1100},{type:'nutrient',count:14,interval:820},{type:'fine',count:12,interval:850}]},
+  {label:'All Threats — Final Push',
+   enemies:[{type:'flash',count:9,interval:780},{type:'urban',count:16,interval:760},{type:'aggregate',count:9,interval:1100},{type:'turbidity',count:9,interval:1000},{type:'nutrient',count:15,interval:780},{type:'coarse',count:12,interval:760}]},
+  {label:'100-Year Flood — Final Stand',
+   enemies:[{type:'flash',count:12,interval:680},{type:'urban',count:18,interval:660},{type:'aggregate',count:10,interval:950},{type:'turbidity',count:10,interval:900},{type:'coarse',count:14,interval:680},{type:'nutrient',count:15,interval:700},{type:'fine',count:14,interval:700}]}
+];
+
+// Map 2 — Branching Watershed (12 waves)
+const WAVES_MAP2=[
+  // Early waves (1-5): farm branch only, coarse/fine, learn the layout
+  {label:'Farm Branch — Coarse & Fine',
+   enemies:[{type:'coarse',count:14,interval:1700,pathIdx:0},{type:'fine',count:8,interval:1800,pathIdx:0}]},
+  {label:'More Volume',
+   enemies:[{type:'coarse',count:16,interval:1500,pathIdx:0},{type:'fine',count:10,interval:1600,pathIdx:0}]},
+  {label:'Aggregates Forming',
+   enemies:[{type:'coarse',count:14,interval:1400,pathIdx:0},{type:'fine',count:10,interval:1500,pathIdx:0},{type:'aggregate',count:4,interval:2200,pathIdx:0}]},
+  {label:'Aggregates — Heavier Load',
+   enemies:[{type:'coarse',count:16,interval:1300,pathIdx:0},{type:'fine',count:12,interval:1400,pathIdx:0},{type:'aggregate',count:6,interval:2000,pathIdx:0}]},
+  {label:'Turbidity Rising',
+   enemies:[{type:'turbidity',count:5,interval:1600,pathIdx:0},{type:'coarse',count:14,interval:1300,pathIdx:0},{type:'fine',count:10,interval:1400,pathIdx:0},{type:'aggregate',count:4,interval:2000,pathIdx:0}]},
+  // Mid-early (6-8): nutrients and turbidity build up on farm branch
+  {label:'Nutrient Plumes Detected',
+   enemies:[{type:'nutrient',count:8,interval:1300,pathIdx:0},{type:'turbidity',count:6,interval:1500,pathIdx:0},{type:'coarse',count:12,interval:1200,pathIdx:0},{type:'fine',count:10,interval:1300,pathIdx:0}]},
+  {label:'Nutrient Surge',
+   enemies:[{type:'nutrient',count:12,interval:1200,pathIdx:0},{type:'turbidity',count:7,interval:1400,pathIdx:0},{type:'aggregate',count:5,interval:1900,pathIdx:0},{type:'fine',count:10,interval:1200,pathIdx:0}]},
+  {label:'Farm Branch — Peak Load',
+   enemies:[{type:'nutrient',count:14,interval:1100,pathIdx:0},{type:'turbidity',count:8,interval:1300,pathIdx:0},{type:'aggregate',count:6,interval:1800,pathIdx:0},{type:'coarse',count:12,interval:1100,pathIdx:0}]},
+  // Wave 9 — construction branch opens with coarse/sediment load
+  {label:'Construction Branch Opens!',path2Unlocks:true,
+   enemies:[{type:'coarse',count:14,interval:1300,pathIdx:1},{type:'aggregate',count:5,interval:1800,pathIdx:1},{type:'nutrient',count:10,interval:1100,pathIdx:0},{type:'turbidity',count:7,interval:1300,pathIdx:0}]},
+  // Mid game (10-13): both branches active, urban and new types join
+  {label:'Urban Runoff on Construction Side',
+   enemies:[{type:'urban',count:8,interval:1200,pathIdx:1},{type:'fine',count:10,interval:1100,pathIdx:1},{type:'nutrient',count:10,interval:1100,pathIdx:0},{type:'turbidity',count:7,interval:1300,pathIdx:0}]},
+  {label:'Dual Branch Surge',
+   enemies:[{type:'aggregate',count:7,interval:1400,pathIdx:1},{type:'turbidity',count:7,interval:1300,pathIdx:0},{type:'urban',count:9,interval:1000,pathIdx:1},{type:'nutrient',count:10,interval:1000,pathIdx:0}]},
+  {label:'Heavy Dual Load',
+   enemies:[{type:'aggregate',count:8,interval:1300,pathIdx:1},{type:'urban',count:10,interval:950,pathIdx:1},{type:'turbidity',count:8,interval:1200,pathIdx:0},{type:'nutrient',count:12,interval:950,pathIdx:0}]},
+  {label:'Both Branches — High Pressure',
+   enemies:[{type:'urban',count:10,interval:900,pathIdx:1},{type:'aggregate',count:8,interval:1200,pathIdx:1},{type:'nutrient',count:12,interval:900,pathIdx:0},{type:'turbidity',count:8,interval:1100,pathIdx:0},{type:'fine',count:10,interval:950}]},
+  // Late game (14-17): flash runoff arrives
+  {label:'Farm Storm — Flash Detected',
+   enemies:[{type:'flash',count:3,interval:1600,pathIdx:0},{type:'nutrient',count:12,interval:1000,pathIdx:0},{type:'urban',count:10,interval:900,pathIdx:1},{type:'turbidity',count:8,interval:1100,pathIdx:0}]},
+  {label:'Flash Runoff Surge',
+   enemies:[{type:'flash',count:5,interval:1400,pathIdx:0},{type:'flash',count:4,interval:1500,pathIdx:1},{type:'nutrient',count:12,interval:950,pathIdx:0},{type:'urban',count:10,interval:900,pathIdx:1}]},
+  {label:'Peak Flow Event — Both Branches',
+   enemies:[{type:'flash',count:6,interval:1200,pathIdx:0},{type:'flash',count:6,interval:1200,pathIdx:1},{type:'aggregate',count:8,interval:1300,pathIdx:1},{type:'turbidity',count:8,interval:1200,pathIdx:0},{type:'nutrient',count:12,interval:950,pathIdx:0}]},
+  {label:'Critical Peak Flow',
+   enemies:[{type:'flash',count:7,interval:1000},{type:'urban',count:12,interval:850,pathIdx:1},{type:'nutrient',count:14,interval:850,pathIdx:0},{type:'aggregate',count:8,interval:1100,pathIdx:1},{type:'turbidity',count:8,interval:1000,pathIdx:0}]},
+  // Final push (18-20)
+  {label:'Maximum Watershed Pressure',
+   enemies:[{type:'flash',count:8,interval:900},{type:'urban',count:14,interval:800,pathIdx:1},{type:'nutrient',count:14,interval:800,pathIdx:0},{type:'aggregate',count:9,interval:1000},{type:'turbidity',count:9,interval:950}]},
+  {label:'Both Branches — Final Stand',
+   enemies:[{type:'flash',count:10,interval:800},{type:'urban',count:14,interval:760,pathIdx:1},{type:'nutrient',count:14,interval:760,pathIdx:0},{type:'aggregate',count:10,interval:900},{type:'turbidity',count:10,interval:880},{type:'fine',count:12,interval:800}]},
+  {label:'100-Year Watershed Flood',
+   enemies:[{type:'flash',count:12,interval:700},{type:'aggregate',count:10,interval:850},{type:'urban',count:16,interval:700,pathIdx:1},{type:'nutrient',count:16,interval:700,pathIdx:0},{type:'turbidity',count:10,interval:800},{type:'fine',count:12,interval:720},{type:'coarse',count:12,interval:730}]}
+];
+const WAVE_BONUS_MAP2=[0,28,32,35,38,42,46,52,58,65,72,80,88,96,106,116,128,142,158,176,200];
+
+// Map 3 wave bonus — same wave count as Maps 1&2 (20 waves), but reduced budget so players feel the pinch
+const WAVE_BONUS_MAP3=[0,22,26,30,34,38,43,48,54,60,67,74,82,90,100,110,122,135,150,167,190];
+
+const ROSTER={
+  p1:['Alex M.','Bailey R.','Cameron T.','Dana L.','Elliot P.','Fiona S.','George H.','Hannah K.','Isaac J.','Jada W.'],
+  p2:['Kai B.','Lena F.','Marcus D.','Nina C.','Owen Z.','Priya N.','Quinn A.','Rosa T.','Sam E.','Talia M.'],
+  p3:['Uma P.','Victor L.','Wren S.','Xander G.','Yara O.','Zoe K.','Adrian C.','Blake N.','Casey V.','Devon R.'],
+  p4:['Eden H.','Felix W.','Grace A.','Hugo S.','Iris L.','Jasper B.','Kira M.','Leo T.','Mia F.','Noah C.']
+};
+
+// ================================================================
+//  STATE
+// ================================================================
+let state={
+  player:'',period:'',money:100,hp:100,wave:1,phase:'prep',
+  map:1,
+  gameSpeed:1,
+  visualEffects:true,
+  path2Active:false, seasonalActive:false, seasonalTimer:0,
+  openChannels:[],
+  selectedTower:null,selectedPlacedIdx:null,
+  towers:[],enemies:[],enemyPool:[],particles:[],
+  waveQueue:[],
+  totalEarned:0,totalIntercepted:0,
+  damageLog:{coarse:0,fine:0,nutrient:0,urban:0,flash:0,aggregate:0,turbidity:0},
+  interceptLog:{coarse:0,fine:0,nutrient:0,urban:0,flash:0,aggregate:0,turbidity:0},
+  placingAt:null,hudThrottle:0
+};
+let canvasS,canvasD,ctxS,ctxD,W,H,lastTimestamp=0,animId=null;
+
+// ================================================================
+//  CANVAS
+// ================================================================
+function initCanvas(){
+  canvasS=document.getElementById('canvas-static');
+  canvasD=document.getElementById('canvas-dynamic');
+  const cont=document.getElementById('canvas-container');
+  W=cont.clientWidth;H=cont.clientHeight;
+  canvasS.width=W;canvasS.height=H;canvasD.width=W;canvasD.height=H;
+  ctxS=canvasS.getContext('2d');ctxD=canvasD.getContext('2d');
+}
+function getWaypoints(pathIdx){
+  const pi=pathIdx||0;
+  if(state.map===2){
+    // Farm branch (left) — enters top-left, zigzags down left side, merges at bottom center
+    if(pi===0) return[
+      {x:W*.22,y:H*.05},{x:W*.22,y:H*.18},{x:W*.08,y:H*.18},
+      {x:W*.08,y:H*.35},{x:W*.35,y:H*.35},{x:W*.35,y:H*.52},
+      {x:W*.15,y:H*.52},{x:W*.15,y:H*.68},{x:W*.50,y:H*.68},
+      {x:W*.50,y:H*.82},{x:W*.50,y:H*.97}
+    ];
+    // Construction branch (right) — enters top-right, zigzags down right side, merges at same point
+    if(pi===1) return[
+      {x:W*.78,y:H*.05},{x:W*.78,y:H*.18},{x:W*.92,y:H*.18},
+      {x:W*.92,y:H*.35},{x:W*.65,y:H*.35},{x:W*.65,y:H*.52},
+      {x:W*.85,y:H*.52},{x:W*.85,y:H*.68},{x:W*.50,y:H*.68},
+      {x:W*.50,y:H*.82},{x:W*.50,y:H*.97}
+    ];
+  }
+  if(state.map===3){
+    // Clock face — 8 channels radiating from pond center (50%, 42%)
+    // Each path: pond center → intermediate bend → map edge
+    // Channels: 0=S, 1=SE, 2=E, 3=NE, 4=N, 5=NW, 6=W, 7=SW
+    const cx=W*.50,cy=H*.42; // pond center
+    const paths=[
+      // 0: South — straight down to creek
+      [{x:cx,y:cy},{x:cx,y:H*.62},{x:cx,y:H*.97}],
+      // 1: Southeast
+      [{x:cx,y:cy},{x:W*.68,y:H*.60},{x:W*.82,y:H*.97}],
+      // 2: East — across right side
+      [{x:cx,y:cy},{x:W*.72,y:H*.45},{x:W*.99,y:H*.45}],
+      // 3: Northeast
+      [{x:cx,y:cy},{x:W*.70,y:H*.22},{x:W*.92,y:H*.04}],
+      // 4: North — straight up
+      [{x:cx,y:cy},{x:cx,y:H*.20},{x:cx,y:H*.02}],
+      // 5: Northwest
+      [{x:cx,y:cy},{x:W*.30,y:H*.22},{x:W*.08,y:H*.04}],
+      // 6: West — across left side
+      [{x:cx,y:cy},{x:W*.28,y:H*.45},{x:W*.01,y:H*.45}],
+      // 7: Southwest
+      [{x:cx,y:cy},{x:W*.32,y:H*.60},{x:W*.18,y:H*.97}],
+    ];
+    if(pi>=0&&pi<8) return paths[pi];
+    return paths[0];
+  }
+  // Map 1 — single S-curve with 5 sharp turns
+  return[
+    {x:W*.50,y:H*.05},{x:W*.50,y:H*.16},{x:W*.15,y:H*.16},
+    {x:W*.15,y:H*.30},{x:W*.78,y:H*.30},{x:W*.78,y:H*.46},
+    {x:W*.18,y:H*.46},{x:W*.18,y:H*.62},{x:W*.72,y:H*.62},
+    {x:W*.72,y:H*.76},{x:W*.38,y:H*.76},{x:W*.38,y:H*.88},
+    {x:W*.38,y:H*.97}
+  ];
+}
+function getAllActivePaths(){
+  if(state.map===1) return[0];
+  if(state.map===2) return state.path2Active?[0,1]:[0];
+  if(state.map===3) return state.openChannels&&state.openChannels.length?[...state.openChannels]:[0];
+  return[0];
+}
+function getBuildZones(){
+  if(state.map===2) return[
+    // Farm branch zones — outer corners of each turn
+    {x:W*.22,y:H*.28},{x:W*.06,y:H*.28},{x:W*.22,y:H*.44},
+    {x:W*.40,y:H*.44},{x:W*.06,y:H*.44},{x:W*.26,y:H*.61},
+    // Construction branch zones
+    {x:W*.78,y:H*.28},{x:W*.94,y:H*.28},{x:W*.78,y:H*.44},
+    {x:W*.60,y:H*.44},{x:W*.94,y:H*.44},{x:W*.74,y:H*.61},
+    // Choke point zones — high value, covers both paths
+    {x:W*.50,y:H*.57},{x:W*.50,y:H*.75},
+  ];
+  if(state.map===3) return[
+    // Inner ring — close to pond, covers multiple channels
+    {x:W*.50,y:H*.58},{x:W*.62,y:H*.54},{x:W*.38,y:H*.54},
+    {x:W*.58,y:H*.34},{x:W*.42,y:H*.34},{x:W*.50,y:H*.28},
+    // Mid ring — between channel spokes
+    {x:W*.70,y:H*.70},{x:W*.30,y:H*.70},{x:W*.75,y:H*.44},
+    {x:W*.25,y:H*.44},{x:W*.68,y:H*.22},{x:W*.32,y:H*.22},
+    // Outer ring — near channel exits
+    {x:W*.82,y:H*.82},{x:W*.18,y:H*.82},{x:W*.88,y:H*.45},
+    {x:W*.12,y:H*.45},{x:W*.78,y:H*.12},{x:W*.22,y:H*.12},
+  ];
+  // Map 1
+  return[
+    {x:W*.50,y:H*.23},{x:W*.34,y:H*.12},{x:W*.15,y:H*.23},
+    {x:W*.65,y:H*.23},{x:W*.78,y:H*.38},{x:W*.55,y:H*.38},
+    {x:W*.30,y:H*.38},{x:W*.18,y:H*.54},{x:W*.45,y:H*.54},
+    {x:W*.72,y:H*.54},{x:W*.72,y:H*.69},{x:W*.45,y:H*.69},
+    {x:W*.22,y:H*.69},{x:W*.38,y:H*.82},
+  ];
+}
+
+// ================================================================
+//  STATIC LAYER
+// ================================================================
+function drawPath(wp,color1,color2){
+  ctxS.strokeStyle=color1+'50';ctxS.lineWidth=22;ctxS.lineCap='round';ctxS.lineJoin='round';
+  ctxS.beginPath();ctxS.moveTo(wp[0].x,wp[0].y);for(let i=1;i<wp.length;i++)ctxS.lineTo(wp[i].x,wp[i].y);ctxS.stroke();
+  ctxS.strokeStyle=color2+'85';ctxS.lineWidth=13;
+  ctxS.beginPath();ctxS.moveTo(wp[0].x,wp[0].y);for(let i=1;i<wp.length;i++)ctxS.lineTo(wp[i].x,wp[i].y);ctxS.stroke();
+  ctxS.strokeStyle='#e0a030a0';ctxS.lineWidth=1.4;ctxS.setLineDash([7,9]);
+  ctxS.beginPath();ctxS.moveTo(wp[0].x,wp[0].y);for(let i=1;i<wp.length;i++)ctxS.lineTo(wp[i].x,wp[i].y);ctxS.stroke();ctxS.setLineDash([]);
+  for(let i=0;i<wp.length-1;i++){
+    const mx=(wp[i].x+wp[i+1].x)/2,my=(wp[i].y+wp[i+1].y)/2,ang=Math.atan2(wp[i+1].y-wp[i].y,wp[i+1].x-wp[i].x);
+    ctxS.save();ctxS.translate(mx,my);ctxS.rotate(ang);ctxS.fillStyle='#e0a03050';ctxS.beginPath();ctxS.moveTo(6,0);ctxS.lineTo(-4,-4);ctxS.lineTo(-4,4);ctxS.closePath();ctxS.fill();ctxS.restore();
+  }
+  ctxS.fillStyle='#e0a030';ctxS.font='11px Oswald';ctxS.textAlign='center';ctxS.fillText('ENTRY',wp[0].x,wp[0].y-10);
+}
+function drawCreek(label){
+  ctxS.fillStyle='#1a4a7a';ctxS.fillRect(0,H*.87,W,H*.13);
+  for(let i=0;i<6;i++){ctxS.fillStyle='#2a6ab874';ctxS.fillRect(W*.05+i*W*.15,H*.895,W*.08,4);}
+  ctxS.fillStyle='#4a9de8aa';ctxS.fillRect(0,H*.87,W,5);
+  ctxS.fillStyle='#4a9de8';ctxS.font='bold 12px Oswald';ctxS.textAlign='center';ctxS.fillText(label||'PROTECTED CREEK',W*.5,H*.934);
+}
+function drawStatic(){
+  ctxS.clearRect(0,0,W,H);
+
+  if(state.map===1){
+    ctxS.fillStyle='#1a2510';ctxS.fillRect(0,0,W,H*.14);
+    ctxS.fillStyle='#2e1e08';ctxS.fillRect(0,H*.14,W,H*.73);
+    ctxS.fillStyle='#1e2e0e';ctxS.fillRect(0,H*.14,W*.09,H*.73);ctxS.fillRect(W*.91,H*.14,W*.09,H*.73);
+    ctxS.strokeStyle='#4a3a1825';ctxS.lineWidth=1;
+    for(let i=0;i<10;i++){const x=W*.11+Math.random()*W*.78;ctxS.beginPath();ctxS.moveTo(x,H*.15);ctxS.bezierCurveTo(x+16,H*.32,x-11,H*.51,x+8,H*.72);ctxS.stroke();}
+    drawCreek('PROTECTED CREEK');
+    drawPath(getWaypoints(0),'#c4973a','#b8860b');
+  }
+
+  if(state.map===2){
+    // Full background — blended organic terrain, no hard dividing line
+    ctxS.fillStyle='#121e0a';ctxS.fillRect(0,0,W,H);
+    // Left half — greener agricultural fields
+    ctxS.fillStyle='#1a3010';ctxS.fillRect(0,0,W*.52,H);
+    // Right half — browner disturbed construction site
+    ctxS.fillStyle='#2a1e08';ctxS.fillRect(W*.48,0,W*.52,H);
+    // Soft blend strip in the middle — no hard edge
+    const grad=ctxS.createLinearGradient(W*.42,0,W*.58,0);
+    grad.addColorStop(0,'#1a3010');grad.addColorStop(1,'#2a1e08');
+    ctxS.fillStyle=grad;ctxS.fillRect(W*.42,0,W*.16,H);
+    // Farm field texture — horizontal crop rows on left
+    ctxS.strokeStyle='#2a4a1a22';ctxS.lineWidth=2;
+    for(let i=0;i<10;i++){const y=H*.04+i*H*.09;ctxS.beginPath();ctxS.moveTo(W*.02,y);ctxS.lineTo(W*.48,y);ctxS.stroke();}
+    // Construction texture — erosion lines on right
+    ctxS.strokeStyle='#4a3a1820';ctxS.lineWidth=1;
+    for(let i=0;i<8;i++){const x=W*.52+i*W*.06;ctxS.beginPath();ctxS.moveTo(x,H*.04);ctxS.bezierCurveTo(x+10,H*.3,x-8,H*.55,x+6,H*.85);ctxS.stroke();}
+    // Branch labels
+    ctxS.fillStyle='#6aad3a88';ctxS.font='bold 11px Oswald';ctxS.textAlign='center';ctxS.fillText('FARM BRANCH',W*.22,H*.08);
+    ctxS.fillStyle='#c4973a88';ctxS.fillText('CONSTRUCTION BRANCH',W*.76,H*.08);
+    // Subtle merge indicator at bottom center
+    ctxS.strokeStyle='#f0a83033';ctxS.lineWidth=1.5;
+    ctxS.beginPath();ctxS.arc(W*.50,H*.84,20,0,Math.PI*2);ctxS.stroke();
+    drawCreek('PROTECTED RIVER');
+    drawPath(getWaypoints(0),'#6aad3a','#4a8a1a');
+    if(state.path2Active) drawPath(getWaypoints(1),'#c4973a','#b8860b');
+    else{
+      const wp2=getWaypoints(1);
+      ctxS.strokeStyle='#44444444';ctxS.lineWidth=14;ctxS.lineCap='round';ctxS.lineJoin='round';ctxS.setLineDash([12,8]);
+      ctxS.beginPath();ctxS.moveTo(wp2[0].x,wp2[0].y);for(let i=1;i<wp2.length;i++)ctxS.lineTo(wp2[i].x,wp2[i].y);ctxS.stroke();ctxS.setLineDash([]);
+      ctxS.fillStyle='#88888877';ctxS.font='bold 11px Oswald';ctxS.textAlign='center';ctxS.fillText('UNLOCKS WAVE 9',W*.76,H*.12);
+    }
+  }
+
+  if(state.map===3){
+    const cx=W*.50,cy=H*.42;
+    // Background — dark stressed landscape
+    ctxS.fillStyle='#0e1208';ctxS.fillRect(0,0,W,H);
+    // Radial terrain rings from pond center
+    const grad=ctxS.createRadialGradient(cx,cy,30,cx,cy,W*.55);
+    grad.addColorStop(0,'#1a2a3a');  // dark water near pond
+    grad.addColorStop(0.15,'#2a3a1a'); // wet saturated soil
+    grad.addColorStop(0.4,'#1e2a10'); // stressed vegetation
+    grad.addColorStop(1,'#0e1208');   // outer dark
+    ctxS.fillStyle=grad;ctxS.fillRect(0,0,W,H);
+    // Pond — central failed detention pond
+    ctxS.fillStyle='#1a3a5a';
+    ctxS.beginPath();ctxS.ellipse(cx,cy,W*.12,H*.09,0,0,Math.PI*2);ctxS.fill();
+    ctxS.strokeStyle='#2a6a9a';ctxS.lineWidth=3;
+    ctxS.beginPath();ctxS.ellipse(cx,cy,W*.12,H*.09,0,0,Math.PI*2);ctxS.stroke();
+    // Failed embankment cracks — radiating from pond
+    ctxS.strokeStyle='#3a2a1a55';ctxS.lineWidth=1;
+    for(let i=0;i<12;i++){
+      const a=i/12*Math.PI*2;
+      ctxS.beginPath();ctxS.moveTo(cx+Math.cos(a)*W*.12,cy+Math.sin(a)*H*.09);
+      ctxS.lineTo(cx+Math.cos(a)*W*.45,cy+Math.sin(a)*H*.40);ctxS.stroke();
+    }
+    // Pond label
+    ctxS.fillStyle='#4a9de8aa';ctxS.font='bold 11px Oswald';ctxS.textAlign='center';
+    ctxS.fillText('FAILED',cx,cy-6);ctxS.fillText('POND',cx,cy+8);
+    // Draw active channels
+    const chColors=['#c4973a','#c4973a','#e05050','#e05050','#e05050','#e05050','#e05050','#c4973a'];
+    const chColors2=['#b8860b','#b8860b','#c03030','#c03030','#c03030','#c03030','#c03030','#b8860b'];
+    const chNames=['SOUTH','SE','EAST','NE','NORTH','NW','WEST','SW'];
+    state.openChannels.forEach(pi=>{
+      const wp=getWaypoints(pi);
+      drawPath(wp,chColors[pi],chColors2[pi]);
+    });
+    // Draw closed channels as faint dotted lines
+    for(let i=0;i<8;i++){
+      if(state.openChannels.includes(i))continue;
+      const wp=getWaypoints(i);
+      ctxS.strokeStyle='#33333355';ctxS.lineWidth=8;ctxS.lineCap='round';ctxS.setLineDash([8,10]);
+      ctxS.beginPath();ctxS.moveTo(wp[0].x,wp[0].y);
+      for(let j=1;j<wp.length;j++)ctxS.lineTo(wp[j].x,wp[j].y);
+      ctxS.stroke();ctxS.setLineDash([]);
+      // Label closed channels
+      const mid=wp[1];
+      ctxS.fillStyle='#44444466';ctxS.font='bold 9px Oswald';ctxS.textAlign='center';
+      ctxS.fillText(chNames[i],mid.x,mid.y);
+    }
+    drawCreek('PROTECTED WATERSHED');
+  }
+
+  // Build zones (all maps)
+  getBuildZones().forEach(z=>{
+    ctxS.strokeStyle='#4a7c3f30';ctxS.lineWidth=1;ctxS.setLineDash([4,5]);
+    ctxS.strokeRect(z.x-22,z.y-22,44,44);ctxS.setLineDash([]);
+    ctxS.fillStyle='#4a7c3f16';ctxS.fillRect(z.x-22,z.y-22,44,44);
+  });
+  // Placed towers
+  state.towers.forEach((t,i)=>{
+    const def=TOWERS[t.type];if(!def)return;
+    if(i===state.selectedPlacedIdx){
+      const r=def.range*(t.tier>=1?1.3:1);
+      ctxS.strokeStyle='#f0a83070';ctxS.lineWidth=1.4;ctxS.beginPath();ctxS.arc(t.x,t.y,r,0,Math.PI*2);ctxS.stroke();
+      ctxS.fillStyle='#f0a8300d';ctxS.beginPath();ctxS.arc(t.x,t.y,r,0,Math.PI*2);ctxS.fill();
+    }
+    def.draw(ctxS,t.x,t.y,40,t.tier);
+  });
+}
+
+// ================================================================
+//  GAME LOOP
+// ================================================================
+function gameLoop(ts){
+  if(!ts)ts=0;
+  const rawDt=Math.min((ts-lastTimestamp)/1000,.05);
+  lastTimestamp=ts;
+  const dt=rawDt*state.gameSpeed;
+  if(state.phase==='running'){updateEnemies(dt);updateParticles(dt);updateAttackVisuals(dt);checkTowerAttacks();spawnEnemies(dt);checkWaveComplete();}
+  drawDynamic();
+  if(++state.hudThrottle>=6){updateHUD();state.hudThrottle=0;}
+  animId=requestAnimationFrame(gameLoop);
+}
+
+// ================================================================
+//  ENEMIES
+// ================================================================
+function getEnemy(){return state.enemyPool.pop()||{};}
+function returnEnemy(e){e.active=false;state.enemyPool.push(e);}
+function spawnEnemy(type, pathIdx, hpScale, speedScale){
+  const def=ENEMY_TYPES[type];if(!def)return;
+  const pi=pathIdx||0;
+  const wp=getWaypoints(pi);
+  const hs=hpScale||1;
+  const ss=speedScale||1;
+  const e=getEnemy();
+  const scaledHP=Math.round(def.hp*hs);
+  Object.assign(e,{active:true,type,def,x:wp[0].x,y:wp[0].y,
+    hp:scaledHP,maxHp:scaledHP,
+    speed:def.speed*(.88+Math.random()*.24)*ss,
+    waypointIdx:1,size:def.size,color:def.color,dmg:def.dmg,
+    pathIdx:pi});
+  state.enemies.push(e);
+}
+function releasePayload(e, atRiver){
+  // Single-type split (aggregate → coarse, turbidity → fine)
+  if(e.def.splitsInto && e.def.splitsInto !== 'multi' && e.def.splitCount){
+    const splitDef=ENEMY_TYPES[e.def.splitsInto];
+    if(splitDef){
+      for(let s=0;s<e.def.splitCount;s++){
+        const child=getEnemy();
+        const jitter=(Math.random()-.5)*18;
+        Object.assign(child,{
+          active:true,type:e.def.splitsInto,def:splitDef,
+          x:e.x+jitter,y:e.y+jitter,
+          hp:splitDef.hp*.8,maxHp:splitDef.hp*.8,
+          speed:splitDef.speed*(.9+Math.random()*.2),
+          waypointIdx:e.waypointIdx,
+          size:splitDef.size,color:splitDef.color,dmg:splitDef.dmg,
+          pathIdx:e.pathIdx||0
+        });
+        state.enemies.push(child);
+      }
+      spawnParticle(e.x,e.y,'#ffffff',0.7);
+    }
+  }
+  // Multi-release: flash runoff releases 1 of each payload type
+  if(e.def.splitsInto === 'multi' && e.def.splitPayload){
+    e.def.splitPayload.forEach(type=>{
+      const splitDef=ENEMY_TYPES[type];
+      if(!splitDef)return;
+      if(atRiver){
+        // At river: payload deals direct HP damage and logs as damage
+        state.hp=Math.max(0,state.hp-splitDef.dmg);
+        state.damageLog[type]=(state.damageLog[type]||0)+splitDef.dmg;
+        spawnParticle(e.x,e.y,splitDef.color,0.8);
+      } else {
+        // Mid-path: spawn as live enemies continuing downstream
+        const child=getEnemy();
+        const jitter=(Math.random()-.5)*20;
+        Object.assign(child,{
+          active:true,type,def:splitDef,
+          x:e.x+jitter,y:e.y+jitter,
+          hp:splitDef.hp*.75,maxHp:splitDef.hp*.75,
+          speed:splitDef.speed*(.9+Math.random()*.2),
+          waypointIdx:e.waypointIdx,
+          size:splitDef.size,color:splitDef.color,dmg:splitDef.dmg,
+          pathIdx:e.pathIdx||0
+        });
+        state.enemies.push(child);
+        spawnParticle(e.x,e.y,splitDef.color,0.6);
+      }
+    });
+    // Big flash burst particle effect
+    spawnParticle(e.x,e.y,'#3a8ae8',1.8);
+    spawnParticle(e.x,e.y,'#ffffff',1.2);
+  }
+}
+function updateEnemies(dt){
+  const rem=[];
+  state.enemies.forEach((e,i)=>{
+    if(!e.active){rem.push(i);return;}
+    const wp=getWaypoints(e.pathIdx||0);
+    const tgt=wp[e.waypointIdx];
+    if(!tgt){
+      state.hp=Math.max(0,state.hp-e.dmg);
+      state.damageLog[e.type]=(state.damageLog[e.type]||0)+e.dmg;
+      spawnParticle(e.x,e.y,'#e05050',1.3);
+      // Release payload at river if applicable
+      if(e.def.splitsInto) releasePayload(e,true);
+      returnEnemy(e);rem.push(i);
+      if(state.hp<=0)triggerGameOver();
+      return;
+    }
+    const dx=tgt.x-e.x,dy=tgt.y-e.y,dist=Math.sqrt(dx*dx+dy*dy);
+    const slowFactor=e._slowFactor||1;
+    const spd=e.speed*80*dt*slowFactor;
+    if(dist<spd){e.x=tgt.x;e.y=tgt.y;e.waypointIdx++;}else{e.x+=dx/dist*spd;e.y+=dy/dist*spd;}
+  });
+  for(let i=rem.length-1;i>=0;i--)state.enemies.splice(rem[i],1);
+}
+// Attack visuals — stored separately from particles for performance toggle
+let attackVisuals=[];
+function addAttackVisual(type,x,y,tx,ty,color){
+  if(!state.visualEffects)return;
+  attackVisuals.push({type,x,y,tx,ty,color,life:1});
+}
+
+function checkTowerAttacks(){
+  const dt_approx=1/60*state.gameSpeed; // approximate dt for pulse timers
+  state.towers.forEach(t=>{
+    const def=TOWERS[t.type];if(!def)return;
+    const r=def.range*(t.tier>=1?1.3:1);
+    const base=.36*(t.tier>=2?1.45:t.tier>=1?1.22:1)*state.gameSpeed;
+
+    if(def.attackType==='barrier'){
+      state.enemies.forEach(e=>{
+        if(!e.active)return;
+        const dx=e.x-t.x,dy=e.y-t.y;if(dx*dx+dy*dy>r*r)return;
+        const eff=(def.damage[e.type]||0)/100;
+        e.hp-=base*eff;
+        if(state.visualEffects&&t.type==='riparian_buffer'&&Math.random()<0.06){
+          attackVisuals.push({type:'beam',x:t.x,y:t.y,tx:e.x+(Math.random()-.5)*12,ty:e.y+(Math.random()-.5)*12,color:'#1a9e65',life:0.5});
+        } else if(state.visualEffects&&Math.random()<0.03){
+          attackVisuals.push({type:'filter',x:e.x+(Math.random()-.5)*14,y:e.y+(Math.random()-.5)*14,color:def.color,life:0.5});
+        }
+        killIfDead(e,def,t);
+      });
+    } else if(def.attackType==='slow'){
+      state.enemies.forEach(e=>{
+        if(!e.active)return;
+        const dx=e.x-t.x,dy=e.y-t.y;if(dx*dx+dy*dy>r*r)return;
+        const eff=(def.damage[e.type]||0)/100;
+        e.hp-=base*eff;
+        if(!e.slowedBy)e.slowedBy=new Set();
+        e.slowedBy.add(t);
+        if(state.visualEffects&&Math.random()<0.05){
+          attackVisuals.push({type:'ripple',x:t.x,y:t.y,r:0,maxR:r,color:'#7c6fad',life:1});
+        }
+        killIfDead(e,def,t);
+      });
+    } else if(def.attackType==='targeted'){
+      let closest=null,closestDist=r*r;
+      state.enemies.forEach(e=>{
+        if(!e.active)return;
+        const dx=e.x-t.x,dy=e.y-t.y,d=dx*dx+dy*dy;
+        if(d<closestDist){closestDist=d;closest=e;}
+      });
+      if(closest){
+        const eff=(def.damage[closest.type]||0)/100;
+        closest.hp-=base*eff*1.8;
+        if(state.visualEffects) addAttackVisual('beam',t.x,t.y,closest.x,closest.y,def.color);
+        killIfDead(closest,def,t);
+      }
+    } else if(def.attackType==='pulse'){
+      if(t.pulseTimer===undefined)t.pulseTimer=0;
+      t.pulseTimer-=dt_approx;
+      if(t.pulseTimer>0)return;
+      const interval=(def.pulseInterval||3)*(t.tier>=1?0.8:1);
+      t.pulseTimer=interval;
+      let hitCount=0;
+      state.enemies.forEach(e=>{
+        if(!e.active)return;
+        const dx=e.x-t.x,dy=e.y-t.y;if(dx*dx+dy*dy>r*r)return;
+        const eff=(def.damage[e.type]||0)/100;
+        const pulseDmg=base*eff*interval*2.5;
+        e.hp-=pulseDmg;hitCount++;
+        killIfDead(e,def,t);
+      });
+      if(state.visualEffects&&hitCount>0){
+        attackVisuals.push({type:'pulse',x:t.x,y:t.y,r:0,maxR:r,color:def.color,life:1});
+      }
+    }
+  });
+
+  // Clear slow flags for enemies that left range
+  state.enemies.forEach(e=>{
+    if(!e.active||!e.slowedBy)return;
+    e.slowedBy.forEach(t=>{
+      const def=TOWERS[t.type];if(!def||def.attackType!=='slow')return;
+      const r=def.range*(t.tier>=1?1.3:1);
+      const dx=e.x-t.x,dy=e.y-t.y;
+      if(dx*dx+dy*dy>r*r)e.slowedBy.delete(t);
+    });
+    e._slowFactor=(e.slowedBy.size>0)?0.45:1;
+  });
+}
+
+function killIfDead(e,towerDef,t){
+  if(e.hp<=0&&e.active){
+    const baseReward=INTERCEPT_REWARD[e.type]||3;
+    // Map 3 pays 1.8× — radial defense with 8 channels is much harder to cover efficiently
+    const reward=state.map===3?Math.round(baseReward*1.8):baseReward;
+    const prevEarned=state.totalEarned;
+    state.money+=reward;state.totalEarned+=reward;state.totalIntercepted++;
+    state.interceptLog[e.type]=(state.interceptLog[e.type]||0)+1;
+    showEarnPop(e.x,e.y,reward);
+    if(state.visualEffects)spawnParticle(e.x,e.y,towerDef.color,1.0);
+    if(e.def.splitsInto)releasePayload(e,false);
+    returnEnemy(e);e.active=false;
+    // Map 3 has lower unlock thresholds — BMPs need to come online faster
+    const unlockThresholds=state.map===3?[100,200,350,550,900]:[100,280,500,800,1300];
+    if(unlockThresholds.some(th=>prevEarned<th&&state.totalEarned>=th))buildShop();
+  }
+}
+function spawnParticle(x,y,color,sc){for(let i=0;i<4;i++)state.particles.push({x,y,color,vx:(Math.random()-.5)*52*sc,vy:(Math.random()-.85)*52*sc,life:1,r:2.3+Math.random()*2.8*sc});}
+function updateParticles(dt){state.particles=state.particles.filter(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=72*dt;p.life-=dt*2;return p.life>0;});}
+
+function spawnEnemies(dt){
+  if(state.phase!=='running')return;
+  // Each group runs its own countdown timer independently —
+  // this lets multiple paths spawn at the same time instead of sequential.
+  let anyRemaining=false;
+  state.waveQueue.forEach(g=>{
+    if(g.spawned>=g.count)return;
+    anyRemaining=true;
+    g.timer=(g.timer||0)-dt;
+    if(g.timer>0)return;
+    const activePaths=getAllActivePaths();
+    const pathIdx=g.pathIdx!==undefined?g.pathIdx:activePaths[g.spawned%activePaths.length];
+    // Apply HP scaling for later waves — enemies get progressively tougher
+    const hpScale=getWaveHPScale(state.wave);
+    const speedScale=getWaveSpeedScale(state.wave);
+    spawnEnemy(g.type,pathIdx,hpScale,speedScale);
+    g.spawned++;
+    g.timer=g.interval/1000;
+  });
+}
+
+// HP multiplier by wave number — enemies in later waves have more HP
+function getWaveHPScale(wave){
+  if(wave<=2) return 1.0;
+  if(wave<=4) return 1.25;
+  if(wave<=6) return 1.6;
+  if(wave<=8) return 2.0;
+  if(wave<=10) return 2.5;
+  if(wave<=12) return 3.0;
+  if(wave<=14) return 3.6;
+  if(wave<=16) return 4.4;
+  if(wave<=18) return 5.2;
+  return 6.2;
+}
+// Speed multiplier for late waves — enemies get faster after wave 14
+function getWaveSpeedScale(wave){
+  if(wave<=14) return 1.0;
+  if(wave<=16) return 1.2;
+  if(wave<=18) return 1.4;
+  return 1.65;
+}
+function getMapWaves(){return WAVES;}
+function getMapWaveBonus(){return state.map===3?WAVE_BONUS_MAP3:WAVE_BONUS;}
+function getMapMaxWaves(){return 20;}
+function getMapStartMoney(){return state.map===3?350:state.map===2?150:100;}
+function getMapStartHP(){return state.map===3?75:100;}
+
+function checkWaveComplete(){
+  if(state.phase!=='running')return;
+  // All groups must be fully spawned AND no enemies remain on screen
+  if(state.waveQueue.some(g=>g.spawned<g.count))return;
+  if(state.enemies.length>0)return;
+  state.phase='between';
+  // End seasonal event
+  if(state.seasonalActive){
+    state.seasonalActive=false;state.gameSpeed=Math.min(state.gameSpeed,1);
+    drawStatic(); // redraw to remove seasonal overlay
+  }
+  state.gameSpeed=1;
+  document.getElementById('ff-btn').classList.remove('active');
+  document.getElementById('ff-btn').textContent='⏩';
+  const maxWaves=getMapMaxWaves();
+  if(state.wave>=maxWaves){triggerWin();return;}
+  const bonusArr=getMapWaveBonus();
+  const bonus=bonusArr[state.wave]||50;
+  state.money+=bonus;state.totalEarned+=bonus;state.wave++;
+  const waves=getMapWaves();
+  const nextWave=waves[state.wave-1];
+  const nextLabel=nextWave?nextWave.label:'Final Wave';
+  // Map 3: open new channels — truly random, seeded from system time
+  // Adjacency constraint: first 2 openings must be adjacent to an already-open channel
+  // After that, any remaining closed channel can open
+  if(state.map===3){
+    const CHANNEL_NAMES=['South','Southeast','East','Northeast','North','Northwest','West','Southwest'];
+    const CHANNEL_MSGS=[
+      'S EMBANKMENT FAILING',    // 0 — not used (south always starts open)
+      'SE EMBANKMENT FAILING — NEW BREACH',
+      'EASTERN EMBANKMENT FAILURE',
+      'NE EMBANKMENT — STRUCTURAL FAILURE',
+      'CATASTROPHIC NORTHERN COLLAPSE',
+      'NW COLLAPSE — CRITICAL BREACH',
+      'WESTERN WALL BREACHED',
+      'SW LEVEE COLLAPSING — BREACH DETECTED',
+    ];
+    // Wave numbers when a new channel opens: 3,5,7,9,11,13,15
+    const OPEN_WAVES=[3,5,7,9,11,13,15];
+    if(OPEN_WAVES.includes(state.wave)){
+      const closed=[];
+      for(let i=0;i<8;i++){if(!state.openChannels.includes(i))closed.push(i);}
+      if(closed.length>0){
+        // Determine adjacency constraint: first 2 new openings after south must be adjacent
+        const newOpenings=state.openChannels.length-1; // how many have opened beyond south
+        let eligible=closed;
+        if(newOpenings<2){
+          // Only channels adjacent to any already-open channel
+          const adj=new Set();
+          state.openChannels.forEach(ch=>{
+            adj.add((ch+1)%8);
+            adj.add((ch+7)%8);
+          });
+          const adjClosed=closed.filter(ch=>adj.has(ch));
+          if(adjClosed.length>0) eligible=adjClosed;
+          // If no adjacent closed channels exist, fall back to any closed channel
+        }
+        // Pick randomly using system time
+        const seed=Date.now();
+        const pick=eligible[seed%eligible.length];
+        state.openChannels.push(pick);
+        drawStatic();
+        const msg=CHANNEL_MSGS[pick];
+        showBanner('WAVE '+(state.wave-1)+' CLEAR!  +$'+bonus+'  '+msg,3000);
+        document.getElementById('wave-info').textContent=msg+' — '+state.openChannels.length+' channels now active';
+      } else {
+        showBanner('WAVE '+(state.wave-1)+' CLEAR!  +$'+bonus,2200);
+      }
+    } else {
+      showBanner('WAVE '+(state.wave-1)+' CLEAR!  +$'+bonus,2200);
+    }
+  } else {
+    // Map 2 construction branch
+    if(state.map===2&&state.wave===9&&!state.path2Active){
+      state.path2Active=true;drawStatic();
+      showBanner('WAVE '+(state.wave-1)+' CLEAR!  +$'+bonus+'  CONSTRUCTION BRANCH OPENS!',2800);
+    } else {
+      showBanner('WAVE '+(state.wave-1)+' CLEAR!  +$'+bonus,2200);
+    }
+  }
+  document.getElementById('wave-btn').disabled=false;
+  document.getElementById('wave-btn').textContent='Start Wave '+state.wave;
+  document.getElementById('wave-info').textContent='+$'+bonus+' bonus! Next: '+nextLabel;
+  document.getElementById('hud-wave').textContent=state.wave+' / '+maxWaves;
+  buildShop();
+}
+function startWave(){
+  if(state.phase!=='prep'&&state.phase!=='between')return;
+  // On Wave 1 start, count any leftover budget as "earned" so placement savings unlock towers
+  if(state.wave===1){
+    const leftover=state.money; // whatever wasn't spent during prep
+    state.totalEarned+=leftover;
+    buildShop();
+  }
+  const waves=getMapWaves();
+  const wData=waves[state.wave-1];
+  state.waveQueue=wData.enemies.map(e=>({...e,spawned:0,timer:0}));
+  state.phase='running';
+  document.getElementById('wave-btn').disabled=true;
+  document.getElementById('wave-info').textContent=wData.label+' — place towers anytime!';
+  const waveNum=state.wave;
+  if(state.map===3){
+    const OPEN_WAVES=[3,5,7,9,11,13,15];
+    if(OPEN_WAVES.includes(waveNum)&&state.openChannels.length<8){
+      showBanner('WAVE '+waveNum+' — BREACH SPREADING',2200);
+    } else if(state.openChannels.length>=8){
+      showBanner('WAVE '+waveNum+' — ALL CHANNELS BREACHED',2000);
+    } else {
+      showBanner('WAVE '+waveNum+' — '+state.openChannels.length+' ACTIVE BREACHES',1800);
+    }
+  } else {
+    const speedScale=getWaveSpeedScale(waveNum);
+    const prevSpeedScale=getWaveSpeedScale(waveNum-1);
+    if(state.map===2&&waveNum===9){
+      showBanner('WAVE 9 — CONSTRUCTION BRANCH OPENS!',2800);
+    } else if(speedScale>1&&prevSpeedScale<=1){
+      showBanner('WAVE '+waveNum+' — PEAK FLOW EVENT',2400);
+    } else if(speedScale>=1.4&&prevSpeedScale<1.4){
+      showBanner('WAVE '+waveNum+' — CRITICAL PEAK DISCHARGE',2400);
+    } else if(speedScale>=1.6&&prevSpeedScale<1.6){
+      showBanner('WAVE '+waveNum+' — 100-YEAR PEAK DISCHARGE',2400);
+    } else {
+      showBanner('WAVE '+waveNum,1600);
+    }
+  }
+}
+function toggleVFX(){
+  state.visualEffects=!state.visualEffects;
+  const btn=document.getElementById('vfx-btn');
+  if(state.visualEffects){btn.textContent='Effects: ON';btn.classList.remove('off');}
+  else{btn.textContent='Effects: OFF';btn.classList.add('off');attackVisuals=[];state.particles=[];}
+}
+function toggleFF(){
+  if(state.gameSpeed===1){
+    state.gameSpeed=2;
+    document.getElementById('ff-btn').classList.add('active');
+    document.getElementById('ff-btn').textContent='⏩ 2×';
+  } else if(state.gameSpeed===2){
+    state.gameSpeed=3;
+    document.getElementById('ff-btn').textContent='⏩ 3×';
+  } else {
+    state.gameSpeed=1;
+    document.getElementById('ff-btn').classList.remove('active');
+    document.getElementById('ff-btn').textContent='⏩';
+  }
+}
+
+// ================================================================
+//  DYNAMIC LAYER
+// ================================================================
+function updateAttackVisuals(dt){
+  attackVisuals=attackVisuals.filter(v=>{
+    v.life-=dt*(v.type==='beam'?4:v.type==='pulse'||v.type==='ripple'?1.8:3);
+    if(v.type==='pulse'||v.type==='ripple') v.r=Math.min(v.r+(v.maxR||60)*dt*2,v.maxR||60);
+    return v.life>0;
+  });
+}
+function drawDynamic(){
+  ctxD.clearRect(0,0,W,H);
+
+  // Attack visuals — drawn below enemies
+  if(state.visualEffects){
+    attackVisuals.forEach(v=>{
+      ctxD.globalAlpha=v.life*0.7;
+      if(v.type==='beam'){
+        // Targeted beam — bioswale treatment line
+        ctxD.strokeStyle=v.color;ctxD.lineWidth=2.5;
+        ctxD.beginPath();ctxD.moveTo(v.x,v.y);ctxD.lineTo(v.tx,v.ty);ctxD.stroke();
+        // Dot at target
+        ctxD.fillStyle=v.color;ctxD.beginPath();ctxD.arc(v.tx,v.ty,4,0,Math.PI*2);ctxD.fill();
+      } else if(v.type==='pulse'){
+        // Expanding ring — basin/wetland pulse
+        ctxD.strokeStyle=v.color;ctxD.lineWidth=3;
+        ctxD.beginPath();ctxD.arc(v.x,v.y,v.r,0,Math.PI*2);ctxD.stroke();
+        // Fill fade
+        ctxD.fillStyle=v.color;ctxD.globalAlpha=v.life*0.12;
+        ctxD.beginPath();ctxD.arc(v.x,v.y,v.r,0,Math.PI*2);ctxD.fill();
+      } else if(v.type==='ripple'){
+        // Expanding ripple — check dam slow field
+        ctxD.strokeStyle=v.color;ctxD.lineWidth=1.5;ctxD.setLineDash([6,6]);
+        ctxD.beginPath();ctxD.arc(v.x,v.y,v.r,0,Math.PI*2);ctxD.stroke();ctxD.setLineDash([]);
+      } else if(v.type==='filter'){
+        // Small dot drift — barrier filter effect
+        ctxD.fillStyle=v.color;ctxD.beginPath();ctxD.arc(v.x,v.y,3,0,Math.PI*2);ctxD.fill();
+      }
+      ctxD.globalAlpha=1;
+    });
+
+    // Slow indicator on slowed enemies — blue tint ring
+    state.enemies.forEach(e=>{
+      if(!e.active||!e._slowFactor||e._slowFactor>=1)return;
+      ctxD.globalAlpha=0.4;
+      ctxD.strokeStyle='#7c6fad';ctxD.lineWidth=2;
+      ctxD.beginPath();ctxD.arc(e.x,e.y,e.size+3,0,Math.PI*2);ctxD.stroke();
+      ctxD.globalAlpha=1;
+    });
+  }
+
+  // Enemies
+  state.enemies.forEach(e=>{
+    if(!e.active)return;
+    const hp=e.hp/e.maxHp;
+    const barW=e.size*2.4;
+    ctxD.fillStyle='#11111199';
+    ctxD.fillRect(e.x-barW/2,e.y-e.size-10,barW,5);
+    ctxD.fillStyle=hp>.6?'#5cb85c':hp>.3?'#f0a830':'#e05050';
+    ctxD.fillRect(e.x-barW/2,e.y-e.size-10,barW*hp,5);
+    ctxD.save();e.def.draw(ctxD,e.x,e.y,e.size);ctxD.restore();
+  });
+
+  // Particles (death/split effects)
+  if(state.visualEffects){
+    state.particles.forEach(p=>{
+      ctxD.globalAlpha=p.life;
+      ctxD.fillStyle=p.color;
+      ctxD.beginPath();ctxD.arc(p.x,p.y,p.r,0,Math.PI*2);ctxD.fill();
+    });
+    ctxD.globalAlpha=1;
+  }
+
+  // Tower placement preview
+  if(state.selectedTower&&state.placingAt){
+    const def=TOWERS[state.selectedTower];
+    ctxD.strokeStyle='#f0a83050';ctxD.lineWidth=1.3;ctxD.setLineDash([5,5]);
+    ctxD.beginPath();ctxD.arc(state.placingAt.x,state.placingAt.y,def.range,0,Math.PI*2);ctxD.stroke();
+    ctxD.setLineDash([]);
+    ctxD.globalAlpha=.42;def.draw(ctxD,state.placingAt.x,state.placingAt.y,40,0);ctxD.globalAlpha=1;
+  }
+}
+
+// ================================================================
+//  HUD
+// ================================================================
+function updateHUD(){
+  document.getElementById('hud-hp').textContent=Math.max(0,Math.round(state.hp));
+  document.getElementById('hud-money').textContent='$'+Math.round(state.money);
+  document.getElementById('hud-wave').textContent=`${state.wave} / ${getMapMaxWaves()}`;
+  const p=state.hp/getMapStartHP(),bar=document.getElementById('health-bar');
+  bar.style.width=(Math.min(p,1)*100)+'%';bar.style.background=p>.6?'#5cb85c':p>.3?'#f0a830':'#e05050';
+  if(state.selectedPlacedIdx!=null) showPlacedActions(state.selectedPlacedIdx);
+}
+
+// ================================================================
+//  SHOP — tower unlock by totalEarned
+// ================================================================
+function buildShop(){
+  const shop=document.getElementById('tower-shop');shop.innerHTML='';
+  Object.values(TOWERS).forEach(def=>{
+    const unlocked=state.totalEarned>=def.unlockAt||def.unlockAt===0;
+    const affordable=state.money>=def.cost;
+    const div=document.createElement('div');
+    const cls=['shop-item'];
+    if(state.selectedTower===def.id)cls.push('selected');
+    if(!unlocked)cls.push('locked');
+    else if(!affordable)cls.push('unaffordable');
+    div.className=cls.join(' ');
+    div.onclick=()=>unlocked?selectTower(def.id):showNotif(`Earn $${def.unlockAt} total to unlock ${def.name}!`);
+    const ic=document.createElement('div');ic.className='shop-icon';
+    const c=document.createElement('canvas');c.width=32;c.height=32;def.draw(c.getContext('2d'),16,16,30,0);ic.appendChild(c);
+    const info=document.createElement('div');
+    if(unlocked){
+      const affordStyle=affordable?'':'color:var(--text-muted);';
+      info.innerHTML=`<div class="shop-name">${def.name}</div><div class="shop-cost" style="${affordStyle}">$${def.cost} <span class="shop-key">[${def.key}]</span>${affordable?'':' — need more $'}</div>`;
+    } else {
+      info.innerHTML=`<div class="shop-name">${def.name}</div><div class="shop-lock">Earn $${def.unlockAt} to unlock</div>`;
+    }
+    div.appendChild(ic);div.appendChild(info);shop.appendChild(div);
+  });
+}
+
+// ================================================================
+//  TOOLTIP
+// ================================================================
+function showTooltip(src){
+  let def,tier=0;
+  if(typeof src==='string')def=TOWERS[src];else{def=TOWERS[src.type];tier=src.tier||0;}
+  document.getElementById('tt-name').textContent=def.name;
+  document.getElementById('tt-desc').textContent=def.desc;
+  document.getElementById('tt-science').textContent=def.science;
+  const effEl=document.getElementById('tt-eff');effEl.innerHTML='';
+  const labs={coarse:'Coarse sediment',fine:'Fine sediment',nutrient:'Nutrients',urban:'Urban runoff',flash:'Flash runoff',aggregate:'Aggregates',turbidity:'Turbidity plume'};
+  Object.entries(def.damage).forEach(([k,v])=>{
+    const row=document.createElement('div');row.className='eff-row';
+    const col=v>=70?'#5cb85c':v>=40?'#f0a830':'#e05050';const txt=v>=70?'High':v>=40?'Med':v>=10?'Low':'None';
+    row.innerHTML=`<span class="eff-label">${labs[k]}</span><div class="eff-track"><div class="eff-fill" style="width:${v}%;background:${col};"></div></div><span class="eff-text" style="color:${col}">${txt}</span>`;
+    effEl.appendChild(row);
+  });
+  document.getElementById('tooltip-panel').classList.remove('hidden');
+}
+function hideTooltip(){document.getElementById('tooltip-panel').classList.add('hidden');}
+
+// ================================================================
+//  PLACING
+// ================================================================
+function selectTower(id){
+  state.selectedTower=state.selectedTower===id?null:id;
+  state.selectedPlacedIdx=null;document.getElementById('placed-actions').classList.add('hidden');
+  document.getElementById('canvas-container').classList.toggle('placing',!!state.selectedTower);
+  buildShop();state.selectedTower?showTooltip(state.selectedTower):hideTooltip();drawStatic();
+}
+function canvasClick(e){
+  const r=canvasS.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  const placed=state.towers.findIndex(t=>Math.hypot(t.x-mx,t.y-my)<24);
+  if(placed>=0){
+    state.selectedPlacedIdx=placed;state.selectedTower=null;buildShop();showTooltip(state.towers[placed]);showPlacedActions(placed);
+    document.getElementById('canvas-container').classList.remove('placing');drawStatic();return;
+  }
+  if(!state.selectedTower){state.selectedPlacedIdx=null;hidePlacedActions();hideTooltip();drawStatic();return;}
+  const def=TOWERS[state.selectedTower];
+  if(state.money<def.cost){showNotif('Not enough budget!');return;}
+  // Check against all active paths
+  const allPaths=getAllActivePaths();
+  for(const pi of allPaths){
+    const wp=getWaypoints(pi);
+    for(let i=0;i<wp.length-1;i++){
+      const ax=wp[i].x,ay=wp[i].y,bx=wp[i+1].x,by=wp[i+1].y,dx=bx-ax,dy=by-ay;
+      const t2=Math.max(0,Math.min(1,((mx-ax)*dx+(my-ay)*dy)/(dx*dx+dy*dy)));
+      if(Math.hypot(mx-(ax+t2*dx),my-(ay+t2*dy))<28){showNotif("Can't place on the flow path!");return;}
+    }
+  }
+  state.towers.push({type:state.selectedTower,x:mx,y:my,tier:0});
+  state.money-=def.cost;buildShop();showNotif(def.name+' placed!');drawStatic();
+}
+function canvasMouseMove(e){if(!state.selectedTower)return;const r=canvasS.getBoundingClientRect();state.placingAt={x:e.clientX-r.left,y:e.clientY-r.top};}
+function canvasMouseLeave(){state.placingAt=null;}
+
+// ================================================================
+//  UPGRADE / SELL
+// ================================================================
+function showPlacedActions(idx){
+  const t=state.towers[idx],def=TOWERS[t.type];
+  const cost=def.upgradeCost*(t.tier+1);
+  const btn=document.getElementById('upgrade-btn');
+  const canAfford=state.money>=cost;
+  if(t.tier>=2){
+    btn.textContent='Max Level';btn.disabled=true;btn.style.opacity='0.35';btn.style.borderColor='var(--text-muted)';btn.style.color='var(--text-muted)';
+  } else {
+    btn.textContent=`Upgrade $${cost}`;
+    btn.disabled=!canAfford;
+    btn.style.opacity=canAfford?'1':'0.35';
+    btn.style.borderColor=canAfford?'var(--accent-amber)':'var(--text-muted)';
+    btn.style.color=canAfford?'var(--accent-amber)':'var(--text-muted)';
+  }
+  // Show what this upgrade does
+  const upgradeWhat=def.upgradeWhat;
+  if(upgradeWhat&&t.tier<2){
+    const desc=upgradeWhat[t.tier];
+    document.getElementById('tt-science').textContent=`NEXT UPGRADE: ${desc}`;
+  }
+  document.getElementById('placed-actions').classList.remove('hidden');
+}
+function hidePlacedActions(){document.getElementById('placed-actions').classList.add('hidden');}
+function upgradeTower(){
+  const idx=state.selectedPlacedIdx;if(idx==null)return;
+  const t=state.towers[idx],def=TOWERS[t.type];if(t.tier>=2){showNotif('Already max level!');return;}
+  const cost=def.upgradeCost*(t.tier+1);if(state.money<cost){showNotif('Not enough budget!');return;}
+  state.money-=cost;t.tier++;showNotif(`${def.name} upgraded to Tier ${t.tier}!`);showPlacedActions(idx);buildShop();drawStatic();
+}
+function sellTower(){
+  const idx=state.selectedPlacedIdx;if(idx==null)return;
+  const t=state.towers[idx],def=TOWERS[t.type],refund=Math.round(def.cost*.6);
+  state.towers.splice(idx,1);state.money+=refund;state.selectedPlacedIdx=null;
+  hidePlacedActions();hideTooltip();showNotif(`Sold for $${refund}`);buildShop();drawStatic();
+}
+
+// ================================================================
+//  WIN / LOSE / END
+// ================================================================
+function triggerGameOver(){if(state.phase==='gameover')return;state.phase='gameover';saveScore();showEndScreen(false);}
+function triggerWin(){if(state.phase==='win')return;state.phase='win';saveScore();showEndScreen(true);}
+function showEndScreen(won){
+  const el=document.getElementById('screen-end');el.style.display='flex';
+  document.getElementById('end-result').textContent=won?'VICTORY!':'WATERSHED LOST';
+  document.getElementById('end-result').className='end-result '+(won?'win':'lose');
+  document.getElementById('end-subtitle').textContent=won?`Well done, ${state.player}. You protected the creek through all ${getMapMaxWaves()} waves.`:`The creek was overwhelmed, ${state.player}. Try upgrading BMPs earlier next time.`;
+  const eC={coarse:'#c4893a',fine:'#b0b0c8',nutrient:'#52c45a',urban:'#6060a0',flash:'#3a8ae8',aggregate:'#7a4010',turbidity:'#8a7a60'};
+  const eN={coarse:'Coarse Sediment',fine:'Fine Sediment',nutrient:'Nutrient Plume',urban:'Urban Runoff',flash:'Flash Runoff',aggregate:'Sediment Aggregate',turbidity:'Turbidity Plume'};
+  let iHtml='<div class="intercept-title">Pollutants Intercepted</div>';
+  Object.entries(state.interceptLog).forEach(([k,v])=>{if(v>0)iHtml+=`<div class="intercept-row"><div class="intercept-dot" style="background:${eC[k]};"></div>${eN[k]}: <strong style="color:${eC[k]};margin-left:4px;">${v} stopped</strong></div>`;});
+  document.getElementById('intercept-summary').innerHTML=iHtml;
+  const h=Math.round(state.hp*10),w=Math.round(state.wave*50),b=Math.round(state.money*2),isc=state.totalIntercepted*3,tot=h+w+b+isc;
+  document.getElementById('score-breakdown').innerHTML=`
+    <div class="score-row"><span class="score-label">River health (${Math.round(state.hp)} HP × 10)</span><span class="score-val">${h}</span></div>
+    <div class="score-row"><span class="score-label">Waves survived (${state.wave} × 50)</span><span class="score-val">${w}</span></div>
+    <div class="score-row"><span class="score-label">Budget remaining ($${Math.round(state.money)} × 2)</span><span class="score-val">${b}</span></div>
+    <div class="score-row"><span class="score-label">Intercepts (${state.totalIntercepted} × 3 pts)</span><span class="score-val">${isc}</span></div>
+    <div class="score-row"><span class="score-label">Final Score</span><span class="score-val total">${tot}</span></div>`;
+}
+
+// ================================================================
+//  NOTIFICATIONS
+// ================================================================
+let _notifT=null,_bannerT=null,_earnT=null,_earnFlashT=null;
+function showNotif(msg){const el=document.getElementById('notif');el.textContent=msg;el.classList.add('show');clearTimeout(_notifT);_notifT=setTimeout(()=>el.classList.remove('show'),2200);}
+function showBanner(msg,dur){const el=document.getElementById('wave-banner');el.textContent=msg;el.classList.add('show');clearTimeout(_bannerT);_bannerT=setTimeout(()=>el.classList.remove('show'),dur);}
+function showEarnPop(x,y,amt){
+  const el=document.getElementById('earn-pop');
+  el.textContent='+$'+amt;el.style.left=(x+8)+'px';el.style.top=(y-22)+'px';
+  el.classList.add('show');clearTimeout(_earnT);_earnT=setTimeout(()=>el.classList.remove('show'),650);
+  const fl=document.getElementById('earn-flash');fl.textContent='+$'+amt+' intercepted!';fl.style.opacity='1';
+  clearTimeout(_earnFlashT);_earnFlashT=setTimeout(()=>{fl.style.opacity='0';},1100);
+}
+
+// ================================================================
+//  INSTRUCTIONS TABS
+// ================================================================
+function instrTab(i){
+  document.querySelectorAll('.instr-tab').forEach((t,j)=>t.classList.toggle('on',j===i));
+  document.querySelectorAll('.instr-page').forEach((p,j)=>p.classList.toggle('on',j===i));
+  if(i===1) buildSedInstrGrid();
+}
+function buildSedInstrGrid(){
+  const grid=document.getElementById('sed-instr-grid');
+  if(!grid||grid.dataset.built)return;
+  // Data for each sediment type shown in instructions
+  const SED_INFO=[
+    {key:'coarse', speed:'Slow', hp:'High', reward:'$5', wide:false,
+     desc:'Large soil particles dislodged from bare slopes by rain and surface flow. Visible as muddy brown streaks running off a construction site. Moves slowly but carries a heavy load.',
+     harm:'Settles on stream beds and smothers macroinvertebrates — the insects that form the base of the aquatic food web. Fills fish spawning gravels. Increases turbidity, blocking sunlight from aquatic plants.'},
+    {key:'fine', speed:'Fast', hp:'Low', reward:'$3', wide:false,
+     desc:'Tiny particles that stay suspended in water long after coarser sediment settles. Produced from disturbed topsoil. Silt fences alone cannot stop it — it slips right through.',
+     harm:'Clogs fish gills and disrupts respiration. Reduces light penetration, killing aquatic plants. Carries attached phosphorus, fueling algae blooms.'},
+    {key:'aggregate', speed:'Slow', hp:'Very High', reward:'$13', wide:false,
+     desc:'Clay particles that have flocculated (clumped) into large aggregates in water. Slow and tough — but when broken up by a check dam or bioswale, they disaggregate back into multiple coarse particles.',
+     harm:'The largest single sediment load: one aggregate releases 3 coarse particles when destroyed. Heavy enough to physically bury stream substrate and suffocate benthic communities.'},
+    {key:'turbidity', speed:'Medium', hp:'High', reward:'$9', wide:false,
+     desc:'A murky plume of suspended fine solids created when bare construction soil contacts runoff. When slowed by vegetation or settling structures, it releases individual fine particles.',
+     harm:'High turbidity blocks photosynthesis in aquatic plants and impairs the vision of predatory fish. Destroying a turbidity plume releases 4 fine particles — your bioswales need to be ready.'},
+    {key:'nutrient', speed:'Medium', hp:'Medium', reward:'$8', wide:false,
+     desc:'Dissolved nitrogen and phosphorus from fertilizers. You cannot see it — it flows through physical barriers as if they aren\'t there. Requires biological treatment to remove.',
+     harm:'Causes eutrophication — excessive algae growth depletes oxygen, creating dead zones. A major threat to the Chattahoochee watershed in Georgia.'},
+    {key:'urban', speed:'Fast', hp:'Medium', reward:'$11', wide:false,
+     desc:'A complex mix of oil, heavy metals, fine particles, and chemicals washed off roads and rooftops. No single BMP handles it — requires multiple towers working together.',
+     harm:'Motor oil and heavy metals (zinc from tires, copper from brakes) are toxic to aquatic life at very low concentrations. Leading cause of stream degradation nationwide.'},
+    {key:'flash', speed:'Very Fast', hp:'Very High', reward:'$18', wide:true,
+     desc:'A high-velocity Peak Flow surge carrying ALL pollutant types — coarse, fine, nutrients, and urban chemicals simultaneously. When intercepted, it releases 4 of each type downstream. If it reaches the river, those secondaries deal extra damage too.',
+     harm:'A single Peak Flow event delivers more total pollutant load than weeks of normal flow. The physical force destroys streambanks and overwhelms underpowered BMPs. You need a full treatment train to handle everything it carries.'},
+  ];
+  const speedCol={Slow:'#f0a830',Medium:'#f0a830',Fast:'#5cb85c','Very Fast':'#e05050'};
+  const hpCol={Low:'#5cb85c',Medium:'#f0a830',High:'#e05050','Very High':'#e05050'};
+  SED_INFO.forEach(info=>{
+    const def=ENEMY_TYPES[info.key];if(!def)return;
+    const card=document.createElement('div');
+    card.className='sed-card';
+    if(info.wide)card.style.gridColumn='span 2';
+    // Header with live canvas shape
+    const hdr=document.createElement('div');hdr.className='sed-header';
+    const c=document.createElement('canvas');c.width=44;c.height=44;c.style.flexShrink='0';
+    const cx=c.getContext('2d');
+    // Draw shape preview on a dark background circle
+    cx.fillStyle='#1a2510';cx.beginPath();cx.arc(22,22,20,0,Math.PI*2);cx.fill();
+    def.draw(cx,22,22,info.key==='aggregate'?10:info.key==='turbidity'?9:def.size);
+    const nameDiv=document.createElement('div');
+    nameDiv.innerHTML=`<div class="sed-name">${def.name}</div><div class="sed-type" style="color:${def.color};">${def.id==='aggregate'?'Splits into 3 coarse · $13':def.id==='turbidity'?'Splits into 4 fine · $9':def.id==='flash'?'Carries all types — Peak Flow Event · $18':def.id==='coarse'?'Sand &amp; Gravel · $5':def.id==='fine'?'Silt &amp; Clay · $3':def.id==='nutrient'?'Dissolved N &amp; P · $8':'Mixed Pollutants · $11'}</div>`;
+    hdr.appendChild(c);hdr.appendChild(nameDiv);
+    card.appendChild(hdr);
+    const desc=document.createElement('div');desc.className='sed-desc';desc.textContent=info.desc;card.appendChild(desc);
+    const harm=document.createElement('div');harm.className='sed-harm';harm.innerHTML=`<strong>Environmental harm:</strong> ${info.harm}`;card.appendChild(harm);
+    const stats=document.createElement('div');stats.className='sed-stats';
+    stats.innerHTML=`<div class="sed-stat"><div class="sed-stat-val" style="color:${speedCol[info.speed]||'#f0a830'}">${info.speed}</div><div class="sed-stat-lbl">Speed</div></div><div class="sed-stat"><div class="sed-stat-val" style="color:${hpCol[info.hp]||'#f0a830'}">${info.hp}</div><div class="sed-stat-lbl">HP</div></div><div class="sed-stat"><div class="sed-stat-val" style="color:#5cb85c">${info.reward}</div><div class="sed-stat-lbl">Reward</div></div>`;
+    card.appendChild(stats);
+    grid.appendChild(card);
+  });
+  grid.dataset.built='1';
+}
+function buildTowerInstrGrid(){
+  const grid=document.getElementById('tower-instr-grid');grid.innerHTML='';
+  Object.values(TOWERS).forEach(def=>{
+    const card=document.createElement('div');card.className='tower-instr-card';
+    const c=document.createElement('canvas');c.width=46;c.height=46;c.className='ti-icon';def.draw(c.getContext('2d'),23,23,42,0);
+    const hdr=document.createElement('div');hdr.className='ti-header';
+    const attackLabels={barrier:'Passive Barrier',slow:'Slow Field',targeted:'Targeted Treatment',pulse:'Treatment Pulse'};
+    const attackColors={barrier:'#5cb85c',slow:'#7c6fad',targeted:'#4a9a3a',pulse:'#2a8ab5'};
+    const aType=def.attackType||'barrier';
+    const info=document.createElement('div');info.innerHTML=`<div class="ti-name">${def.name}</div><div class="ti-cost">$${def.cost} · Unlocks at $${def.unlockAt} · <span style="color:${attackColors[aType]}">${attackLabels[aType]||aType}</span></div>`;
+    hdr.appendChild(c);hdr.appendChild(info);card.appendChild(hdr);
+    const descEl=document.createElement('p');descEl.className='ti-desc';descEl.textContent=def.desc;card.appendChild(descEl);
+    const effDiv=document.createElement('div');effDiv.className='ti-eff';
+    const labs={coarse:'Coarse',fine:'Fine Sed.',nutrient:'Nutrients',urban:'Urban',flash:'Flash',aggregate:'Aggregate',turbidity:'Turbidity'};
+    Object.entries(def.damage).forEach(([k,v])=>{const t=document.createElement('span');t.className='ti-tag '+(v>=70?'tag-hi':v>=35?'tag-med':'tag-lo');t.textContent=`${labs[k]}: ${v>=70?'High':v>=35?'Med':'Low'}`;effDiv.appendChild(t);});
+    card.appendChild(effDiv);
+    const sci=document.createElement('div');sci.className='ti-science';sci.textContent=def.science;card.appendChild(sci);
+    grid.appendChild(card);
+  });
+}
+
+// ================================================================
+//  LEADERBOARD — Firestore backed, falls back to session-local
+// ================================================================
+const _localScores={1:[],2:[],3:[]};
+let currentLbMap=1;
+
+async function saveScore(){
+  const h=Math.round(state.hp*10);
+  const w=Math.round(state.wave*50);
+  const b=Math.round(state.money*2);
+  const isc=state.totalIntercepted*3;
+  const total=h+w+b+isc;
+  const entry={
+    name:state.player||'Unknown',
+    period:state.period||'',
+    map:state.map,
+    score:total,
+    waves:state.wave,
+    hp:Math.round(state.hp),
+    intercepted:state.totalIntercepted,
+    ts:Date.now()
+  };
+  // Save to local fallback always
+  _localScores[state.map].push(entry);
+  _localScores[state.map].sort((a,b)=>b.score-a.score);
+  if(_localScores[state.map].length>25)_localScores[state.map].length=25;
+  // Write to Firestore if available
+  if(window._fbSaveScore) await window._fbSaveScore(entry);
+}
+
+function lbTab(mapNum){
+  currentLbMap=mapNum;
+  document.querySelectorAll('.lb-tab').forEach((t,i)=>t.classList.toggle('on',i===mapNum-1));
+  renderLeaderboard(mapNum);
+}
+
+async function renderLeaderboard(mapNum){
+  const content=document.getElementById('lb-content');
+  if(!content)return;
+  content.innerHTML='<div class="lb-empty">Loading scores...</div>';
+  let scores=[];
+  // Try Firestore first
+  if(window._fbGetScores){
+    scores=await window._fbGetScores(mapNum);
+  }
+  // Fall back to local if Firestore returned nothing
+  if(!scores||scores.length===0) scores=_localScores[mapNum]||[];
+
+  const playerName=state.player;
+  if(scores.length===0){
+    content.innerHTML='<div class="lb-empty">No scores yet for this map. Play a round to get on the board!</div>';
+    return;
+  }
+  let html='<table class="lb-table"><thead><tr>';
+  html+='<th style="width:40px">#</th><th>Player</th><th>Period</th>';
+  html+='<th class="num">Waves</th><th class="num">HP Left</th><th class="num">Intercepts</th><th class="num">Score</th>';
+  html+='</tr></thead><tbody>';
+  scores.forEach((s,i)=>{
+    const isPlayer=s.name===playerName;
+    const rankClass=i===0?'gold':i===1?'silver':i===2?'bronze':'';
+    html+='<tr class="'+(isPlayer?'highlight':'')+'"><td><span class="lb-rank '+rankClass+'">'+(i+1)+'</span></td>';
+    html+='<td>'+s.name+'</td><td style="color:var(--text-muted);font-size:11px;">'+s.period+'</td>';
+    html+='<td class="num">'+s.waves+'</td><td class="num">'+s.hp+'</td><td class="num">'+s.intercepted+'</td>';
+    html+='<td class="num" style="color:var(--accent-amber);font-size:15px;">'+s.score+'</td></tr>';
+  });
+  html+='</tbody></table>';
+  content.innerHTML=html;
+}
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  if(name==='instructions')buildTowerInstrGrid();
+  if(name==='leaderboard'){
+    // Default to current map's tab, or map 1 if coming from menu
+    const mapToShow=state.map||1;
+    currentLbMap=mapToShow;
+    document.querySelectorAll('.lb-tab').forEach((t,i)=>t.classList.toggle('on',i===mapToShow-1));
+    renderLeaderboard(mapToShow);
+  }
+  if(name==='game'){
+    initCanvas();resetGame();buildShop();drawStatic();
+    if(animId)cancelAnimationFrame(animId);
+    lastTimestamp=0;animId=requestAnimationFrame(gameLoop);
+    canvasS.addEventListener('click',canvasClick);
+    canvasS.addEventListener('mousemove',canvasMouseMove);
+    canvasS.addEventListener('mouseleave',canvasMouseLeave);
+  }
+}
+function loadRoster(){
+  const period=document.getElementById('period-select').value;
+  const list=document.getElementById('name-list');list.innerHTML='';state.player=null;
+  document.getElementById('continue-btn').disabled=true;document.getElementById('continue-btn').classList.remove('ready');
+  if(!period)return;
+  (ROSTER[period]||[]).forEach(n=>{
+    const btn=document.createElement('button');btn.className='name-btn';btn.textContent=n;
+    btn.onclick=()=>{document.querySelectorAll('.name-btn').forEach(b=>b.classList.remove('selected'));btn.classList.add('selected');state.player=n;state.period=period;document.getElementById('continue-btn').disabled=false;document.getElementById('continue-btn').classList.add('ready');};
+    list.appendChild(btn);
+  });
+}
+function endGame(){
+  if(animId){cancelAnimationFrame(animId);animId=null;}
+  showScreen('instructions');
+}
+function selectMap(n){
+  state.map=n;
+  showScreen('game');
+}
+function resetGame(){
+  const startMoney=getMapStartMoney();
+  const startHP=getMapStartHP();
+  const maxW=getMapMaxWaves();
+  const waves=getMapWaves();
+  state.money=startMoney;state.hp=startHP;state.wave=1;state.phase='prep';
+  state.gameSpeed=1;state.path2Active=false;state.seasonalActive=false;
+  state.openChannels=state.map===3?[0]:[];
+  state.selectedTower=null;state.selectedPlacedIdx=null;
+  state.towers=[];state.enemies=[];state.enemyPool=[];state.particles=[];
+  state.visualEffects=true;
+  attackVisuals=[];
+  state.waveQueue=[];
+  state.totalEarned=0;state.totalIntercepted=0;
+  state.damageLog={coarse:0,fine:0,nutrient:0,urban:0,flash:0,aggregate:0,turbidity:0};
+  state.interceptLog={coarse:0,fine:0,nutrient:0,urban:0,flash:0,aggregate:0,turbidity:0};
+  state.placingAt=null;state.hudThrottle=0;
+  document.getElementById('screen-end').style.display='none';
+  document.getElementById('wave-btn').disabled=false;
+  document.getElementById('wave-btn').textContent='Start Wave 1';
+  document.getElementById('wave-info').textContent=waves[0]?`Wave 1: ${waves[0].label}`:'Start Wave 1';
+  document.getElementById('hud-wave').textContent=`1 / ${maxW}`;
+  document.getElementById('hud-hp').textContent=startHP;
+  document.getElementById('health-bar').style.width='100%';
+  document.getElementById('health-bar').style.background='#5cb85c';
+  const ffBtn=document.getElementById('ff-btn');
+  if(ffBtn){ffBtn.classList.remove('active');ffBtn.textContent='⏩';}
+  const vfxBtn=document.getElementById('vfx-btn');
+  if(vfxBtn){vfxBtn.textContent='Effects: ON';vfxBtn.classList.remove('off');}
+}
+function restartGame(){document.getElementById('screen-end').style.display='none';resetGame();buildShop();drawStatic();document.getElementById('canvas-container').classList.remove('placing');hideTooltip();hidePlacedActions();}
+document.addEventListener('keydown',e=>{
+  if(!document.getElementById('screen-game').classList.contains('active'))return;
+  const m=Object.values(TOWERS).find(t=>t.key===e.key);if(m)selectTower(m.id);
+  if(e.key==='f'||e.key==='F') toggleFF();
+  if(e.key==='Escape'){state.selectedTower=null;state.selectedPlacedIdx=null;buildShop();hideTooltip();hidePlacedActions();document.getElementById('canvas-container').classList.remove('placing');drawStatic();}
+});
+window.addEventListener('resize',()=>{if(document.getElementById('screen-game').classList.contains('active')){initCanvas();drawStatic();}});
+</script>
+</body>
+</html>
