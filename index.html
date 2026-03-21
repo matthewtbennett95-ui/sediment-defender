@@ -930,8 +930,17 @@ async function fetchRoster(){
     const built = {};
 
     lines.forEach(line => {
-      // Parse CSV — handle quoted fields
-      const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g,''));
+      // Proper CSV parsing — handles quoted fields containing commas
+      // e.g. "Bennett, Matthew",1st Period,2025-2026
+      const cols = [];
+      let cur = '', inQuotes = false;
+      for(let i = 0; i < line.length; i++){
+        const ch = line[i];
+        if(ch === '"'){ inQuotes = !inQuotes; }
+        else if(ch === ',' && !inQuotes){ cols.push(cur.trim()); cur = ''; }
+        else { cur += ch; }
+      }
+      cols.push(cur.trim()); // last field
       if(cols.length < 3) return;
       const [year, period, name] = cols;
       if(!name) return;
