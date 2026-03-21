@@ -506,8 +506,8 @@ body{display:flex;flex-direction:column;font-family:var(--font-body);}
     <div class="intercept-summary" id="intercept-summary"></div>
     <div class="score-breakdown" id="score-breakdown"></div>
     <div class="end-btns">
-      <button class="end-btn" onclick="showScreen('leaderboard')">Leaderboard</button>
-      <button class="end-btn primary" onclick="showScreen('mapselect')">Play Again</button>
+      <button class="end-btn" onclick="closeEndScreen('leaderboard')">Leaderboard</button>
+      <button class="end-btn primary" onclick="closeEndScreen('mapselect')">Play Again</button>
     </div>
   </div>
 </div>
@@ -918,10 +918,15 @@ async function fetchRoster(){
   const statusEl = document.getElementById('roster-status');
   try {
     if(statusEl) statusEl.textContent = 'Loading roster...';
+    console.log('Fetching roster from:', ROSTER_CSV_URL);
     const resp = await fetch(ROSTER_CSV_URL);
+    console.log('Roster response status:', resp.status);
     const text = await resp.text();
+    console.log('Roster CSV preview:', text.slice(0, 200));
     const lines = text.trim().split('\n').slice(1); // skip header row
+    console.log('Roster lines found:', lines.length);
     const schoolYear = getCurrentSchoolYear();
+    console.log('Current school year:', schoolYear);
     const built = {};
 
     lines.forEach(line => {
@@ -2135,6 +2140,11 @@ function resetGame(){
   if(ffBtn){ffBtn.classList.remove('active');ffBtn.textContent='⏩';}
   const vfxBtn=document.getElementById('vfx-btn');
   if(vfxBtn){vfxBtn.textContent='Effects: ON';vfxBtn.classList.remove('off');}
+}
+function closeEndScreen(dest){
+  document.getElementById('screen-end').style.display='none';
+  if(animId){cancelAnimationFrame(animId);animId=null;}
+  showScreen(dest);
 }
 function restartGame(){document.getElementById('screen-end').style.display='none';resetGame();buildShop();drawStatic();document.getElementById('canvas-container').classList.remove('placing');hideTooltip();hidePlacedActions();}
 document.addEventListener('keydown',e=>{
