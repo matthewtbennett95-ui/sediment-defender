@@ -308,14 +308,10 @@ body{display:flex;flex-direction:column;font-family:var(--font-body);}
     <p>Select your class period, then choose your name.</p>
     <select class="period-select" id="period-select" onchange="loadRoster()">
       <option value="">— Select your period —</option>
-      <option value="p1">1st Period</option>
-      <option value="p2">2nd Period</option>
-      <option value="p3">3rd Period</option>
-      <option value="p4">4th Period</option>
     </select>
     <div class="name-list" id="name-list"></div>
     <button class="continue-btn" id="continue-btn" onclick="showScreen('instructions')" disabled>Continue to Briefing →</button>
-    <p style="font-size:11px;color:var(--text-muted);margin-top:10px;text-align:center;">Roster loaded from class database.</p>
+    <p id="roster-status" style="font-size:11px;color:var(--text-muted);margin-top:10px;text-align:center;">Loading roster...</p>
   </div>
 </div>
 
@@ -894,12 +890,115 @@ const WAVE_BONUS_MAP2=[0,28,32,35,38,42,46,52,58,65,72,80,88,96,106,116,128,142,
 // Map 3 wave bonus — same wave count as Maps 1&2 (20 waves), but reduced budget so players feel the pinch
 const WAVE_BONUS_MAP3=[0,22,26,30,34,38,43,48,54,60,67,74,82,90,100,110,122,135,150,167,190];
 
-const ROSTER={
-  p1:['Alex M.','Bailey R.','Cameron T.','Dana L.','Elliot P.','Fiona S.','George H.','Hannah K.','Isaac J.','Jada W.'],
-  p2:['Kai B.','Lena F.','Marcus D.','Nina C.','Owen Z.','Priya N.','Quinn A.','Rosa T.','Sam E.','Talia M.'],
-  p3:['Uma P.','Victor L.','Wren S.','Xander G.','Yara O.','Zoe K.','Adrian C.','Blake N.','Casey V.','Devon R.'],
-  p4:['Eden H.','Felix W.','Grace A.','Hugo S.','Iris L.','Jasper B.','Kira M.','Leo T.','Mia F.','Noah C.']
-};
+// ================================================================
+//  ROSTER — fetched from Google Sheets published CSV
+// ================================================================
+// Sheet columns: Year | Period | Name
+// Special period values: "Teachers" and "Peer Leaders" always show regardless of year
+// School year logic: Aug-May = active year. Jun-Jul = summer (show teachers/peer leaders only)
+// REPLACE THIS URL with your published Google Sheet CSV link:
+const ROSTER_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRhYeqAOZwuCE9kHa3VXMuANepaALtuhT1CtzVTHOv9BpdcGS7U2zBri13fTGRseV62BBYgQCwA5U7K/pub?gid=0&single=true&output=csv';
+
+let ROSTER = {}; // populated by fetchRoster()
+let rosterLoaded = false;
+
+function getCurrentSchoolYear(){
+  const now = new Date();
+  const month = now.getMonth() + 1; // 1=Jan
+  const year = now.getFullYear();
+  // Aug(8)-Dec(12): school year is year/year+1
+  // Jan(1)-May(5): school year is year-1/year
+  // Jun-Jul: summer — return null
+  if(month >= 8) return year + '-' + (year+1);
+  if(month <= 5) return (year-1) + '-' + year;
+  return null; // summer
+}
+
+async function fetchRoster(){
+  const statusEl = document.getElementById('roster-status');
+  try {
+    if(statusEl) statusEl.textContent = 'Loading roster...';
+    const resp = await fetch(ROSTER_CSV_URL);
+    const text = await resp.text();
+    const lines = text.trim().split('\n').slice(1); // skip header row
+    const schoolYear = getCurrentSchoolYear();
+    const built = {};
+
+    lines.forEach(line => {
+      // Parse CSV — handle quoted fields
+      const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g,''));
+      if(cols.length < 3) return;
+      const [year, period, name] = cols;
+      if(!name) return;
+
+      const key = period.trim();
+      if(!built[key]) built[key] = [];
+
+      // Always include Teachers and Peer Leaders
+      if(key === 'Teachers' || key === 'Peer Leaders'){
+        built[key].push(name);
+      } else if(schoolYear && year.trim() === schoolYear){
+        // Only include students from the current school year
+        built[key].push(name);
+      }
+    });
+
+    ROSTER = built;
+    rosterLoaded = true;
+    populatePeriodDropdown();
+    if(statusEl) statusEl.textContent = 'Roster loaded from class database.';
+  } catch(e){
+    console.warn('Roster fetch failed, using fallback:', e);
+    // Fallback — shows message so teacher knows to fix the URL
+    rosterLoaded = true;
+    if(statusEl) statusEl.textContent = 'Could not load roster — check CSV URL.';
+  }
+}
+
+function populatePeriodDropdown(){
+  const sel = document.getElementById('period-select');
+  // Clear existing options except the placeholder
+  while(sel.options.length > 1) sel.remove(1);
+
+  // Order: class periods first (sorted), then Peer Leaders, then Teachers
+  const periods = Object.keys(ROSTER).filter(k => k !== 'Teachers' && k !== 'Peer Leaders').sort();
+  const special = ['Peer Leaders', 'Teachers'].filter(k => ROSTER[k] && ROSTER[k].length > 0);
+
+  [...periods, ...special].forEach(period => {
+    const opt = document.createElement('option');
+    opt.value = period;
+    opt.textContent = period;
+    sel.appendChild(opt);
+  });
+}
+
+function loadRoster(){
+  const period = document.getElementById('period-select').value;
+  const list = document.getElementById('name-list');
+  list.innerHTML = '';
+  state.player = null;
+  document.getElementById('continue-btn').disabled = true;
+  document.getElementById('continue-btn').classList.remove('ready');
+  if(!period) return;
+  const names = ROSTER[period] || [];
+  names.sort().forEach(n => {
+    const btn = document.createElement('button');
+    btn.className = 'name-btn';
+    btn.textContent = n;
+    btn.onclick = () => {
+      document.querySelectorAll('.name-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      state.player = n;
+      state.period = period;
+      document.getElementById('continue-btn').disabled = false;
+      document.getElementById('continue-btn').classList.add('ready');
+    };
+    list.appendChild(btn);
+  });
+}
+
+// Fetch roster on page load
+fetchRoster();
 
 // ================================================================
 //  STATE
@@ -1998,17 +2097,6 @@ function showScreen(name){
     canvasS.addEventListener('mousemove',canvasMouseMove);
     canvasS.addEventListener('mouseleave',canvasMouseLeave);
   }
-}
-function loadRoster(){
-  const period=document.getElementById('period-select').value;
-  const list=document.getElementById('name-list');list.innerHTML='';state.player=null;
-  document.getElementById('continue-btn').disabled=true;document.getElementById('continue-btn').classList.remove('ready');
-  if(!period)return;
-  (ROSTER[period]||[]).forEach(n=>{
-    const btn=document.createElement('button');btn.className='name-btn';btn.textContent=n;
-    btn.onclick=()=>{document.querySelectorAll('.name-btn').forEach(b=>b.classList.remove('selected'));btn.classList.add('selected');state.player=n;state.period=period;document.getElementById('continue-btn').disabled=false;document.getElementById('continue-btn').classList.add('ready');};
-    list.appendChild(btn);
-  });
 }
 function endGame(){
   if(animId){cancelAnimationFrame(animId);animId=null;}
