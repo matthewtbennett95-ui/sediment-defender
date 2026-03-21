@@ -36,11 +36,25 @@
         collection(db,'scores'),
         where('map','==',mapNum),
         orderBy('score','desc'),
-        limit(25)
+        limit(100)
       );
       const snap = await getDocs(q);
       return snap.docs.map(d=>d.data());
     } catch(e){ console.warn('Firestore read failed:',e); return []; }
+  };
+
+  window._fbGetScoresByYear = async function(mapNum, schoolYear){
+    try {
+      const q = query(
+        collection(db,'scores'),
+        where('map','==',mapNum),
+        where('schoolYear','==',schoolYear),
+        orderBy('score','desc'),
+        limit(200)
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map(d=>d.data());
+    } catch(e){ console.warn('Firestore year query failed:',e); return []; }
   };
 </script>
 <style>
@@ -275,6 +289,11 @@ body{display:flex;flex-direction:column;font-family:var(--font-body);}
 .lb-rank.bronze{color:#c4893a;}
 .lb-empty{text-align:center;padding:40px;color:var(--text-muted);font-size:13px;}
 .lb-nav{display:flex;gap:8px;justify-content:center;}
+.lb-view-toggle{display:flex;gap:6px;margin-bottom:16px;}
+.lb-view-btn{font-family:var(--font-display);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:6px 16px;border:1px solid var(--panel-border);background:transparent;color:var(--text-muted);cursor:pointer;transition:all .15s;}
+.lb-view-btn:hover{background:var(--panel-hover);}
+.lb-view-btn.on{border-color:var(--accent-green);color:var(--accent-green);background:rgba(92,184,92,0.07);}
+.lb-period-header{font-family:var(--font-display);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-amber);padding:10px 12px 4px;margin-top:8px;border-bottom:1px solid var(--panel-border);}
 
 /* SHARED OVERLAYS */
 #wave-banner{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:var(--font-display);font-size:clamp(24px,4vw,46px);font-weight:600;color:var(--text-primary);letter-spacing:.1em;text-align:center;pointer-events:none;opacity:0;transition:opacity .4s;z-index:10;text-shadow:0 2px 20px rgba(0,0,0,0.9);}
@@ -294,9 +313,9 @@ body{display:flex;flex-direction:column;font-family:var(--font-body);}
 <!-- TITLE -->
 <div id="screen-title" class="screen active">
   <div class="title-content">
-    <div class="title-eyebrow">10th Grade STEM Engineering</div>
+    <div class="title-eyebrow">10th Grade EPIC Engineering</div>
     <div class="title-main">Sediment<br><span>Defender</span></div>
-    <div class="title-sub">Deploy real green infrastructure to protect a watershed from construction runoff. Every tower is a Best Management Practice used by civil engineers today.</div>
+    <div class="title-sub">Deploy real green infrastructure to protect a watershed from sediment and pollutant runoff. Every BMP is a real Best Management Practice used by civil engineers today.</div>
     <button class="title-btn" onclick="showScreen('player')">Begin Mission</button>
   </div>
 </div>
@@ -436,12 +455,16 @@ body{display:flex;flex-direction:column;font-family:var(--font-body);}
   <div class="lb-wrap">
     <div class="lb-header">
       <h1>Leaderboard</h1>
-      <p>Top 25 scores by map — shared across all class periods in real time.</p>
+      <p>Top scores shared across all class periods in real time.</p>
     </div>
     <div class="lb-tabs">
       <button class="lb-tab on" onclick="lbTab(1)">Map 1 — The Cleared Slope</button>
       <button class="lb-tab" onclick="lbTab(2)">Map 2 — Branching Watershed</button>
       <button class="lb-tab" onclick="lbTab(3)">Map 3 — Detention Pond</button>
+    </div>
+    <div class="lb-view-toggle">
+      <button class="lb-view-btn on" id="lb-view-alltime" onclick="lbView('alltime')">🏆 All Time Top 25</button>
+      <button class="lb-view-btn" id="lb-view-period" onclick="lbView('period')">📋 This Year by Period</button>
     </div>
     <div id="lb-content"></div>
     <div class="lb-nav">
@@ -2029,6 +2052,16 @@ function buildTowerInstrGrid(){
 // ================================================================
 const _localScores={1:[],2:[],3:[]};
 let currentLbMap=1;
+let currentLbView='alltime'; // 'alltime' or 'period'
+
+// Deduplicate scores — keep only best score per person
+function bestPerPerson(scores){
+  const best={};
+  scores.forEach(s=>{
+    if(!best[s.name]||s.score>best[s.name].score) best[s.name]=s;
+  });
+  return Object.values(best).sort((a,b)=>b.score-a.score);
+}
 
 async function saveScore(){
   const h=Math.round(state.hp*10);
@@ -2040,49 +2073,40 @@ async function saveScore(){
     name:state.player||'Unknown',
     period:state.period||'',
     map:state.map,
+    schoolYear:getCurrentSchoolYear()||'',
     score:total,
     waves:state.wave,
     hp:Math.round(state.hp),
     intercepted:state.totalIntercepted,
     ts:Date.now()
   };
-  // Save to local fallback always
   _localScores[state.map].push(entry);
   _localScores[state.map].sort((a,b)=>b.score-a.score);
-  if(_localScores[state.map].length>25)_localScores[state.map].length=25;
-  // Write to Firestore if available
+  if(_localScores[state.map].length>100)_localScores[state.map].length=100;
   if(window._fbSaveScore) await window._fbSaveScore(entry);
 }
 
 function lbTab(mapNum){
   currentLbMap=mapNum;
   document.querySelectorAll('.lb-tab').forEach((t,i)=>t.classList.toggle('on',i===mapNum-1));
-  renderLeaderboard(mapNum);
+  renderLeaderboard();
 }
 
-async function renderLeaderboard(mapNum){
-  const content=document.getElementById('lb-content');
-  if(!content)return;
-  content.innerHTML='<div class="lb-empty">Loading scores...</div>';
-  let scores=[];
-  // Try Firestore first
-  if(window._fbGetScores){
-    scores=await window._fbGetScores(mapNum);
-  }
-  // Fall back to local if Firestore returned nothing
-  if(!scores||scores.length===0) scores=_localScores[mapNum]||[];
+function lbView(view){
+  currentLbView=view;
+  document.querySelectorAll('.lb-view-btn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('lb-view-'+view).classList.add('on');
+  renderLeaderboard();
+}
 
-  const playerName=state.player;
-  if(scores.length===0){
-    content.innerHTML='<div class="lb-empty">No scores yet for this map. Play a round to get on the board!</div>';
-    return;
-  }
+function buildScoreTable(scores, highlightName){
+  if(scores.length===0) return '<div class="lb-empty">No scores yet. Play a round to get on the board!</div>';
   let html='<table class="lb-table"><thead><tr>';
   html+='<th style="width:40px">#</th><th>Player</th><th>Period</th>';
   html+='<th class="num">Waves</th><th class="num">HP Left</th><th class="num">Intercepts</th><th class="num">Score</th>';
   html+='</tr></thead><tbody>';
   scores.forEach((s,i)=>{
-    const isPlayer=s.name===playerName;
+    const isPlayer=s.name===highlightName;
     const rankClass=i===0?'gold':i===1?'silver':i===2?'bronze':'';
     html+='<tr class="'+(isPlayer?'highlight':'')+'"><td><span class="lb-rank '+rankClass+'">'+(i+1)+'</span></td>';
     html+='<td>'+s.name+'</td><td style="color:var(--text-muted);font-size:11px;">'+s.period+'</td>';
@@ -2090,18 +2114,70 @@ async function renderLeaderboard(mapNum){
     html+='<td class="num" style="color:var(--accent-amber);font-size:15px;">'+s.score+'</td></tr>';
   });
   html+='</tbody></table>';
-  content.innerHTML=html;
+  return html;
+}
+
+async function renderLeaderboard(){
+  const content=document.getElementById('lb-content');
+  if(!content)return;
+  const mapNum=currentLbMap;
+  const playerName=state.player;
+  content.innerHTML='<div class="lb-empty">Loading scores...</div>';
+
+  if(currentLbView==='alltime'){
+    // All time — top 25 best scores, one per person
+    let scores=[];
+    if(window._fbGetScores) scores=await window._fbGetScores(mapNum);
+    if(!scores||scores.length===0) scores=_localScores[mapNum]||[];
+    const deduped=bestPerPerson(scores).slice(0,25);
+    content.innerHTML=buildScoreTable(deduped,playerName);
+
+  } else {
+    // This year by period — best per person per period, grouped
+    const schoolYear=getCurrentSchoolYear();
+    let scores=[];
+    if(window._fbGetScoresByYear) scores=await window._fbGetScoresByYear(mapNum,schoolYear);
+    if(!scores||scores.length===0){
+      // Fall back to local, filtered by school year
+      scores=(_localScores[mapNum]||[]).filter(s=>s.schoolYear===schoolYear);
+    }
+    if(scores.length===0){
+      content.innerHTML='<div class="lb-empty">No scores for '+schoolYear+' yet.</div>';
+      return;
+    }
+    // Deduplicate within each period, then group
+    const byPeriod={};
+    bestPerPerson(scores).forEach(s=>{
+      const p=s.period||'Unknown';
+      if(!byPeriod[p]) byPeriod[p]=[];
+      byPeriod[p].push(s);
+    });
+    // Sort periods naturally, Teachers/Peer Leaders last
+    const special=['Teachers','Peer Leaders'];
+    const periods=Object.keys(byPeriod).filter(p=>!special.includes(p)).sort();
+    const specialPresent=special.filter(p=>byPeriod[p]);
+    let html='';
+    [...periods,...specialPresent].forEach(period=>{
+      const pScores=byPeriod[period].sort((a,b)=>b.score-a.score);
+      html+='<div class="lb-period-header">'+period+'</div>';
+      html+=buildScoreTable(pScores,playerName);
+    });
+    content.innerHTML=html;
+  }
 }
 function showScreen(name){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById('screen-'+name).classList.add('active');
   if(name==='instructions')buildTowerInstrGrid();
   if(name==='leaderboard'){
-    // Default to current map's tab, or map 1 if coming from menu
     const mapToShow=state.map||1;
     currentLbMap=mapToShow;
+    currentLbView='alltime';
     document.querySelectorAll('.lb-tab').forEach((t,i)=>t.classList.toggle('on',i===mapToShow-1));
-    renderLeaderboard(mapToShow);
+    document.querySelectorAll('.lb-view-btn').forEach(b=>b.classList.remove('on'));
+    const vtBtn=document.getElementById('lb-view-alltime');
+    if(vtBtn)vtBtn.classList.add('on');
+    renderLeaderboard();
   }
   if(name==='game'){
     initCanvas();resetGame();buildShop();drawStatic();
