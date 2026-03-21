@@ -2133,14 +2133,19 @@ async function renderLeaderboard(){
     content.innerHTML=buildScoreTable(deduped,playerName);
 
   } else {
-    // This year by period — best per person per period, grouped
+    // This year by period — best per person, grouped by period
+    // Students: current school year only. Teachers + Peer Leaders: all time.
     const schoolYear=getCurrentSchoolYear();
-    let scores=[];
-    if(window._fbGetScoresByYear) scores=await window._fbGetScoresByYear(mapNum,schoolYear);
-    if(!scores||scores.length===0){
-      // Fall back to local, filtered by school year
-      scores=(_localScores[mapNum]||[]).filter(s=>s.schoolYear===schoolYear);
-    }
+    let allScores=[];
+    if(window._fbGetScores) allScores=await window._fbGetScores(mapNum);
+    if(!allScores||allScores.length===0) allScores=_localScores[mapNum]||[];
+
+    const specialPeriods=['Teachers','Peer Leaders'];
+    // Students: filter to current school year
+    const studentScores=allScores.filter(s=>!specialPeriods.includes(s.period)&&s.schoolYear===schoolYear);
+    // Teachers + Peer Leaders: all time, no year filter
+    const specialScores=allScores.filter(s=>specialPeriods.includes(s.period));
+    const scores=[...studentScores,...specialScores];
     if(scores.length===0){
       content.innerHTML='<div class="lb-empty">No scores for '+schoolYear+' yet.</div>';
       return;
