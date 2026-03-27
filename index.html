@@ -592,7 +592,7 @@ const TOWERS = {
     attackType:'barrier',  // passive area — continuous damage + mild slow via root network
     color:'#1a9e65',borderColor:'#0f6e45',range:98,
     damage:{coarse:80,fine:75,nutrient:80,urban:35,flash:45,aggregate:75,turbidity:70},
-    upgradeCost:200,upgradeDesc:'Mature canopy — range expands, bank erosion blocked',
+    upgradeCost:280,upgradeDesc:'Mature canopy — range expands, bank erosion blocked',
     upgradeWhat:['Tier 1: Mature canopy — range doubles, rainfall interception added, slows enemies entering','Tier 2: Floodplain restoration — reconnected floodplain absorbs full flash surges, synergy bonus'],
     desc:'Native trees along the streambank. Roots grip soil — one mature tree holds tons of bank in place. Intercepts overland flow and absorbs nutrients. The only BMP that also prevents bank erosion.',
     science:'Tree roots extend 10–15 feet laterally and bind thousands of pounds of streambank. Studies show 35–65% nitrogen reduction with a 50-foot buffer. However, oils and metals require chemical or microbial processes trees don\'t perform.',
@@ -611,7 +611,7 @@ const TOWERS = {
     pulseInterval:3.0,
     color:'#7a7a8a',borderColor:'#5a5a6a',range:88,
     damage:{coarse:95,fine:70,nutrient:20,urban:15,flash:85,aggregate:95,turbidity:75},
-    upgradeCost:200,upgradeDesc:'Outlet structure — handles 100-yr storm volumes',
+    upgradeCost:260,upgradeDesc:'Outlet structure — handles 100-yr storm volumes',
     upgradeWhat:['Tier 1: Outlet structure — engineered for 100-yr storms, pulse fires 25% faster','Tier 2: Emergency spillway — max capacity doubled, pulse hits ALL enemy types including dissolved'],
     desc:'An engineered impoundment storing runoff so sediment settles. Required by Georgia law on construction sites over 1 acre. Handles huge volumes but must be cleaned regularly or it stops working.',
     science:'Designed using hydraulic residence time — engineers calculate how long water must sit for particles to settle (Stokes\' Law). Ineffective against dissolved pollutants because settling removes particles only, not molecules.',
@@ -629,7 +629,7 @@ const TOWERS = {
     pulseInterval:4.0,
     color:'#2a8ab5',borderColor:'#1a5a85',range:118,
     damage:{coarse:80,fine:80,nutrient:90,urban:75,flash:55,aggregate:85,turbidity:90},
-    upgradeCost:280,upgradeDesc:'Cattail establishment — denitrification + oil breakdown',
+    upgradeCost:380,upgradeDesc:'Cattail establishment — denitrification + oil breakdown',
     upgradeWhat:['Tier 1: Cattail establishment — denitrification active, nitrogen removal doubles, wildlife counter','Tier 2: Treatment train — connects to adjacent bioswales, nearby towers get +25% effectiveness'],
     desc:'An engineered shallow water body with aquatic plants. The most powerful BMP — removes pollutants through settling, plant uptake, AND bacterial decomposition simultaneously. The only BMP that treats oils.',
     science:'Wetland bacteria perform denitrification, converting dissolved nitrogen to harmless N₂ gas. Other bacteria break down oil hydrocarbons as food. Metals bind to organic sediment and are buried permanently. Biology doing chemistry.',
@@ -1288,7 +1288,7 @@ function drawStatic(){
   state.towers.forEach((t,i)=>{
     const def=TOWERS[t.type];if(!def)return;
     if(i===state.selectedPlacedIdx){
-      const r=def.range*(t.tier>=2?1.6:t.tier>=1?1.35:1);
+      const r=def.range*(t.tier>=1?1.3:1);
       ctxS.strokeStyle='#f0a83070';ctxS.lineWidth=1.4;ctxS.beginPath();ctxS.arc(t.x,t.y,r,0,Math.PI*2);ctxS.stroke();
       ctxS.fillStyle='#f0a8300d';ctxS.beginPath();ctxS.arc(t.x,t.y,r,0,Math.PI*2);ctxS.fill();
     }
@@ -1418,8 +1418,8 @@ function checkTowerAttacks(){
   const dt_approx=1/60*state.gameSpeed; // approximate dt for pulse timers
   state.towers.forEach(t=>{
     const def=TOWERS[t.type];if(!def)return;
-    const r=def.range*(t.tier>=2?1.6:t.tier>=1?1.35:1);
-    const base=.36*(t.tier>=2?1.9:t.tier>=1?1.45:1)*state.gameSpeed;
+    const r=def.range*(t.tier>=1?1.3:1);
+    const base=.36*(t.tier>=2?1.45:t.tier>=1?1.22:1)*state.gameSpeed;
 
     if(def.attackType==='barrier'){
       state.enemies.forEach(e=>{
@@ -1464,8 +1464,7 @@ function checkTowerAttacks(){
       if(t.pulseTimer===undefined)t.pulseTimer=0;
       t.pulseTimer-=dt_approx;
       if(t.pulseTimer>0)return;
-      // Pulse interval improves meaningfully with upgrades
-      const interval=(def.pulseInterval||3)*(t.tier>=2?0.45:t.tier>=1?0.65:1);
+      const interval=(def.pulseInterval||3)*(t.tier>=1?0.8:1);
       t.pulseTimer=interval;
       let hitCount=0;
       state.enemies.forEach(e=>{
@@ -1476,13 +1475,6 @@ function checkTowerAttacks(){
         e.hp-=pulseDmg;hitCount++;
         killIfDead(e,def,t);
       });
-      // Wetland Tier 2: ecological services bonus — earns money per pulse that hits enemies
-      if(t.type==='wetland'&&t.tier>=2&&hitCount>0){
-        const bonus=hitCount*2;
-        state.money+=bonus;state.totalEarned+=bonus;
-        showEarnPop(t.x,t.y-20,bonus);
-        buildShop();
-      }
       if(state.visualEffects&&hitCount>0){
         attackVisuals.push({type:'pulse',x:t.x,y:t.y,r:0,maxR:r,color:def.color,life:1});
       }
@@ -1494,7 +1486,7 @@ function checkTowerAttacks(){
     if(!e.active||!e.slowedBy)return;
     e.slowedBy.forEach(t=>{
       const def=TOWERS[t.type];if(!def||def.attackType!=='slow')return;
-      const r=def.range*(t.tier>=2?1.6:t.tier>=1?1.35:1);
+      const r=def.range*(t.tier>=1?1.3:1);
       const dx=e.x-t.x,dy=e.y-t.y;
       if(dx*dx+dy*dy>r*r)e.slowedBy.delete(t);
     });
@@ -1514,8 +1506,9 @@ function killIfDead(e,towerDef,t){
     if(state.visualEffects)spawnParticle(e.x,e.y,towerDef.color,1.0);
     if(e.def.splitsInto)releasePayload(e,false);
     returnEnemy(e);e.active=false;
-    // Always rebuild shop so affordability updates instantly
-    buildShop();
+    // Map 3 has lower unlock thresholds — BMPs need to come online faster
+    const unlockThresholds=state.map===3?[100,200,350,550,900]:[100,280,500,800,1300];
+    if(unlockThresholds.some(th=>prevEarned<th&&state.totalEarned>=th))buildShop();
   }
 }
 function spawnParticle(x,y,color,sc){for(let i=0;i<4;i++)state.particles.push({x,y,color,vx:(Math.random()-.5)*52*sc,vy:(Math.random()-.85)*52*sc,life:1,r:2.3+Math.random()*2.8*sc});}
@@ -1562,15 +1555,7 @@ function getWaveSpeedScale(wave){
   if(wave<=18) return 1.4;
   return 1.65;
 }
-// Money setter — automatically refreshes shop when budget changes
-function addMoney(amt){
-  state.money+=amt;
-  buildShop();
-}
-function spendMoney(amt){
-  state.money-=amt;
-  buildShop();
-}
+function getMapWaves(){return WAVES;}
 function getMapWaveBonus(){return state.map===3?WAVE_BONUS_MAP3:WAVE_BONUS;}
 function getMapMaxWaves(){return 20;}
 function getMapStartMoney(){return state.map===3?350:state.map===2?150:100;}
@@ -1938,7 +1923,7 @@ function sellTower(){
   const idx=state.selectedPlacedIdx;if(idx==null)return;
   const t=state.towers[idx],def=TOWERS[t.type],refund=Math.round(def.cost*.6);
   state.towers.splice(idx,1);state.money+=refund;state.selectedPlacedIdx=null;
-  hidePlacedActions();hideTooltip();showNotif('Sold for $'+refund);buildShop();drawStatic();
+  hidePlacedActions();hideTooltip();showNotif(`Sold for $${refund}`);buildShop();drawStatic();
 }
 
 // ================================================================
