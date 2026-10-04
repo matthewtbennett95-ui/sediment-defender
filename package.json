@@ -1,0 +1,12 @@
+{
+  "name": "sediment-defender",
+  "private": true,
+  "type": "module",
+  "description": "Tower-defense game teaching stormwater Best Management Practices.",
+  "scripts": {
+    "serve": "python3 -m http.server 8080 --directory public",
+    "sim": "node tools/sim.mjs 8",
+    "matrix": "node tools/matrix.mjs",
+    "deploy": "firebase deploy --only hosting,firestore"
+  }
+}

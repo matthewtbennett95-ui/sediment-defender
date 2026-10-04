@@ -1,0 +1,55 @@
+rules_version = '2';
+
+// Sediment Defender — Firestore security rules.
+// Students sign in anonymously: they can read the roster, leaderboard and
+// published maps, and add (never edit) their own game results.
+// Only the teacher accounts below can change rosters, maps, or scores.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Keep this list in sync with TEACHER_EMAILS in public/js/services/config.js
+    function isTeacher() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['matthew.t.bennett95@gmail.com'];
+    }
+
+    function validRun(d) {
+      return d.keys().hasOnly(['v', 'name', 'period', 'rosterYear', 'schoolYear', 'mapId', 'mapName',
+                               'score', 'parts', 'wavesCleared', 'won', 'hp', 'prevented',
+                               'netSpent', 'acres', 'seed', 'uid', 'createdAt'])
+        && d.keys().hasAll(['name', 'mapId', 'score', 'uid', 'createdAt'])
+        && d.uid == request.auth.uid
+        && d.createdAt == request.time
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 60
+        && d.period is string && d.period.size() <= 40
+        && d.mapId is string && d.mapId.size() <= 60
+        && d.score is int && d.score >= 0 && d.score <= 12500
+        && d.wavesCleared is int && d.wavesCleared >= 0 && d.wavesCleared <= 40
+        && d.hp is int && d.hp >= 0 && d.hp <= 200;
+    }
+
+    match /rosters/{doc} {
+      allow read: if true;
+      allow write: if isTeacher();
+    }
+
+    match /maps/{mapId} {
+      allow read: if resource.data.published == true || isTeacher();
+      allow write: if isTeacher();
+    }
+
+    match /runs/{id} {
+      allow read: if true;
+      allow create: if request.auth != null && validRun(request.resource.data);
+      allow update, delete: if isTeacher();
+    }
+
+    // Scores from the original (v1) game. Read-only now so the old
+    // leaderboard data is kept but nothing new can be written to it.
+    match /scores/{id} {
+      allow read: if true;
+      allow delete: if isTeacher();
+    }
+  }
+}

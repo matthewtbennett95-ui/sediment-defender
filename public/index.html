@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<title>Sediment Defender</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230d1117'/%3E%3Cpath d='M8 44c8-6 16 6 24 0s16 6 24 0v12H8z' fill='%234a9de8'/%3E%3Cpath d='M14 34h36' stroke='%23c4973a' stroke-width='5'/%3E%3Cpath d='M20 28v12M32 28v12M44 28v12' stroke='%238b6914' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/game.css">
+</head>
+<body>
+<div id="app">
+
+  <div id="screen-title" class="screen active">
+    <div class="eyebrow">10th Grade EPIC Engineering</div>
+    <div class="title-main">Sediment<br><span>Defender</span></div>
+    <p class="title-sub">Storms are washing pollution off the land and into the creek. Design a system of real Best Management Practices to stop it, on a real budget, on real land.</p>
+    <div class="title-actions">
+      <button class="btn" data-go="player">▶ Play</button>
+      <button class="btn ghost" data-go="guide">📖 Field Guide</button>
+      <button class="btn ghost" data-go="leaderboard">🏆 Leaderboard</button>
+    </div>
+    <div class="title-links">
+      <a href="editor.html">Map Editor</a>
+      <a href="teacher.html">Teacher</a>
+    </div>
+    <div class="title-water"></div>
+  </div>
+
+  <div id="screen-player" class="screen scroll-screen">
+    <div class="select-box card">
+      <h2>Who's playing?</h2>
+      <p class="muted small">Pick your class and your name so your score goes on the leaderboard.</p>
+      <div id="quick-resume"></div>
+      <div class="select-row">
+        <label>School year <select id="sel-year"></select></label>
+        <label>Class <select id="sel-period"></select></label>
+      </div>
+      <div class="name-grid" id="name-grid"></div>
+      <div class="row-actions">
+        <button class="btn ghost small" id="btn-guest">Play as guest (no leaderboard)</button>
+        <button class="btn" id="btn-player-go" disabled>Continue →</button>
+      </div>
+      <div class="status" id="roster-status">Loading class list…</div>
+    </div>
+  </div>
+
+  <div id="screen-maps" class="screen scroll-screen">
+    <div class="wrap">
+      <div class="guide-top">
+        <div><h1>Choose a Site</h1><p class="muted" id="maps-who"></p></div>
+        <button class="btn ghost small" data-go="title">Main menu</button>
+      </div>
+      <div class="map-grid" id="map-grid"></div>
+      <div class="row-actions">
+        <button class="btn ghost" data-go="guide">📖 Field Guide</button>
+        <button class="btn ghost" data-go="leaderboard">🏆 Leaderboard</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-guide" class="screen scroll-screen">
+    <div class="wrap" id="guide-root"></div>
+  </div>
+
+  <div id="screen-leaderboard" class="screen scroll-screen">
+    <div class="wrap">
+      <div class="guide-top">
+        <div><h1>Leaderboard</h1><p class="muted">Best score per player. Shared across every class.</p></div>
+        <button class="btn ghost small" id="lb-back">Back</button>
+      </div>
+      <div class="tabs" id="lb-maps"></div>
+      <div class="seg-row" id="lb-views"></div>
+      <div id="lb-content"></div>
+    </div>
+  </div>
+
+  <div id="screen-game" class="screen"></div>
+</div>
+
+<div id="end-overlay" class="overlay hidden"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

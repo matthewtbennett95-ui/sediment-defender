@@ -1,0 +1,32 @@
+body { overflow-y: auto; }
+.t-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--bg2); flex-wrap: wrap; }
+.t-eyebrow { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--green); }
+.t-auth { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text2); }
+.t-main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+.t-section { margin-bottom: 18px; }
+.t-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.t-row > label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.t-row select, .t-row input[type=text] { min-width: 180px; width: auto; }
+.period-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.period-card textarea { min-height: 220px; resize: vertical; font-size: 14px; line-height: 1.45; }
+.period-card .t-row { margin-bottom: 8px; }
+.period-card input[type=text] { width: 100%; }
+.count { font-size: 12px; color: var(--muted); }
+.notice { background: rgba(240,168,48,.08); border: 1px solid #f0a83055; border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #f5d27a; margin-bottom: 14px; line-height: 1.5; }
+.ok { background: rgba(92,184,92,.08); border-color: #5cb85c55; color: #9ed99e; }
+.err { background: rgba(224,80,80,.08); border-color: #e0505055; color: #f0a0a0; }
+.t-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.t-table th { text-align: left; font-family: var(--display); font-weight: 400; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 7px 6px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--panel); }
+.t-table td { padding: 7px 6px; border-bottom: 1px solid var(--border); color: var(--text2); }
+.t-table tr.is-hidden td { opacity: .45; text-decoration: line-through; }
+.t-table .num { text-align: right; }
+.table-wrap { max-height: 60vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.map-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.map-row:last-child { border-bottom: none; }
+.map-row h3 { font-size: 16px; }
+.map-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.pill { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); margin-left: 6px; }
+.pill.live { border-color: var(--green); color: var(--green); }
+textarea.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; min-height: 140px; }
+.period-card .t-row { flex-wrap: nowrap; }
+.period-card .t-row input[type=text] { flex: 1; min-width: 0; }
