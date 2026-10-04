@@ -488,7 +488,7 @@ export class Game {
     bt.prevented += def.dmg; bt.stopped++;
     const wi = this.wave - 1;
     this.stats.wavePrevented[wi] = (this.stats.wavePrevented[wi] || 0) + def.dmg;
-    this.emit('kill', { x: e.x, y: e.y, type: e.type, reward, color: BMPS[t.type].color });
+    this.emit('kill', { x: e.x, y: e.y, ptype: e.type, reward, color: BMPS[t.type].color });
 
     // Breakups release smaller pollutants that keep flowing.
     if (def.splits) {
