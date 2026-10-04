@@ -32,7 +32,7 @@ Other real-world trade-offs built in:
 
 - **Clogging and maintenance.** Sediment fills BMPs, and performance drops when they're full. Sediment control upstream (pretreatment) protects the biological BMPs downstream.
 - **No selling during storms.** You only get 50% salvage, which kills the old "sell everything in the last wave" trick.
-- **Scoring** rewards water quality, river health, and storms survived, plus **cost efficiency** (pollution removed per dollar), **land use** (acres), and **unspent budget**.
+- **Scoring** rewards water quality, river health, and storms survived, plus **cost efficiency** (pollution removed per dollar), **land use** (acres), and **unspent budget**. Water quality grades each storm like a permit standard: 100% removal earns full credit and 95% or less earns none.
 - **Map 3 breaches.** Walls usually show seepage one storm before they fail, so reinforcing is cheaper than repairing. Some breaches still come with no warning.
 
 ## Deploying (first time)

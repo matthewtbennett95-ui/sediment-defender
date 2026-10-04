@@ -178,7 +178,7 @@ async function showEnd(game, map) {
   const saveStatus = el('div.save-status');
 
   const why = {
-    water: `Removed ${pct1(sc.detail.preventedPct)} of the pollution load (${fmt(Math.round(sc.detail.removed))} of ${fmt(Math.round(sc.detail.potential))} units)`,
+    water: `Removed ${pct1(sc.detail.preventedPct)} of the pollution load (${fmt(Math.round(sc.detail.removed))} of ${fmt(Math.round(sc.detail.potential))} units). Each storm needs over 95% for any credit.`,
     health: `${Math.round(game.hp)} of ${game.maxHp} river health left — ${fmt(Math.round(sc.detail.potential - sc.detail.removed))} units reached the creek`,
     waves: `${game.stats.wavesCleared} of ${game.maxWaves} storms`,
     efficiency: `${sc.detail.perHundred.toFixed(1)} load removed per $100 · net spent $${fmt(sc.detail.netSpent)}`,
