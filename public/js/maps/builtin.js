@@ -16,7 +16,7 @@ export const clearedSlope = {
   description: 'A forested hillside cleared for a new subdivision. One long flow path with sharp switchbacks. Learn what each BMP is good at.',
   tags: ['Single path', '20 waves'],
   theme: 'construction',
-  startMoney: 130, startHP: 100, loadScale: 1.1, rewardScale: 1.0, landAllowance: 8, efficiencyTarget: 65,
+  startMoney: 130, startHP: 100, loadScale: 1.1, rewardScale: 1.0, landAllowance: 8, efficiencyTarget: 52,
   creekY: 810, creekLabel: 'PROTECTED CREEK',
   paths: [
     { id: 'main', label: 'RUNOFF', opensAtWave: 1,
@@ -38,7 +38,7 @@ export const branchingWatershed = {
   description: 'A farm stream and a construction stream meet at a choke point above the river. The farm carries nutrients and bacteria; the construction site carries sediment, oil, and metals. The construction branch opens at Wave 7.',
   tags: ['Two paths', 'Branch opens Wave 7'],
   theme: 'split',
-  startMoney: 220, startHP: 100, loadScale: 1.0, rewardScale: 1.15, landAllowance: 9, efficiencyTarget: 55,
+  startMoney: 220, startHP: 100, loadScale: 1.0, rewardScale: 1.15, landAllowance: 9, efficiencyTarget: 44,
   creekY: 810, creekLabel: 'PROTECTED RIVER',
   paths: [
     { id: 'farm', label: 'FARM BRANCH', opensAtWave: 1, color: '#6aad3a',
@@ -66,7 +66,7 @@ export const pondFailure = {
   description: 'An old detention pond is failing. The south wall has already breached, and the rest of the embankment is unstable. Watch for seepage warnings, decide what to repair, and be ready for the breach you didn\'t see coming.',
   tags: ['Random breaches', 'Embankment repair', 'Hard'],
   theme: 'pond',
-  startMoney: 320, startHP: 80, loadScale: 1.0, rewardScale: 1.3, landAllowance: 9, efficiencyTarget: 45,
+  startMoney: 320, startHP: 80, loadScale: 1.0, rewardScale: 1.3, landAllowance: 9, efficiencyTarget: 36,
   creekY: 810, creekLabel: 'PROTECTED WATERSHED',
   // Breach channels drain into three gullies (west, center, east) that
   // carry the water downhill to the creek. Defending a gully covers every

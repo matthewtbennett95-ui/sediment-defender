@@ -42,7 +42,7 @@ export function normalizeMap(input) {
     loadScale: clamp(num(input.loadScale, preset.loadScale), 0.5, 3),
     rewardScale: clamp(num(input.rewardScale, preset.rewardScale), 0.5, 3),
     landAllowance: clamp(num(input.landAllowance, 8), 1, 50),
-    efficiencyTarget: clamp(num(input.efficiencyTarget, 60), 10, 200),
+    efficiencyTarget: clamp(num(input.efficiencyTarget, 48), 10, 200),
     creekY,
     creekLabel: String(input.creekLabel || 'PROTECTED CREEK').slice(0, 40),
     paths: [],

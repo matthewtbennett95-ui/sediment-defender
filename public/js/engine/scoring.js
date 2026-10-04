@@ -1,7 +1,9 @@
 // ================================================================
 //  SCORING — engineering trade-offs, not just "survive"
 //
-//  Water Quality   up to 5000  share of the pollutant load you kept out, wave by wave
+//  Water Quality   up to 5000  each storm is graded against a water-quality standard:
+//                              100% removed = full credit, 95% or less = none,
+//                              straight line in between (99% = 80%, 98% = 60%)
 //  River Health    up to 2000  health left at the end
 //  Waves           up to 2000  100 per wave cleared
 //  Cost Efficiency up to 1500  pollution removed per dollar actually spent
@@ -17,7 +19,9 @@ export const SCORE_CAP = Object.values(SCORE_MAX).reduce((a, b) => a + b, 0);
 
 // Pollution load units removed per $100 spent that earns full efficiency points.
 // (A map can override this with `efficiencyTarget`.)
-export const EFFICIENCY_TARGET = 60;
+export const EFFICIENCY_TARGET = 48;
+// Removal rate at or below which a storm earns no water-quality credit.
+export const WATER_FLOOR = 0.95;
 // Points per unspent dollar (capped at SCORE_MAX.budget).
 export const BUDGET_RATE = 0.5;
 
@@ -34,7 +38,7 @@ export function computeScore(game) {
   for (let i = 0; i < played; i++) {
     const pot = s.wavePotential[i] || 0;
     const prev = s.wavePrevented[i] || 0;
-    if (pot > 0) water += perWave * Math.min(1, prev / pot);
+    if (pot > 0) water += perWave * Math.max(0, Math.min(1, (prev / pot - WATER_FLOOR) / (1 - WATER_FLOOR)));
   }
 
   const health = SCORE_MAX.health * (game.hp / game.maxHp);

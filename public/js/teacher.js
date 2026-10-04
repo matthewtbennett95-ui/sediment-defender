@@ -213,6 +213,7 @@ async function renderScores(body) {
   catch (err) { clear(body).append(el('div.notice.err', 'Could not load scores: ' + err.message)); return; }
   clear(body);
   const mapNames = Object.fromEntries(BUILTIN_MAPS.map(m => [m.id, m.name]));
+  const mapHp = Object.fromEntries(BUILTIN_MAPS.map(m => [m.id, m.startHP]));
   runs.forEach(r => { if (r.mapName) mapNames[r.mapId] ||= r.mapName; });
   const years = [...new Set(runs.map(r => r.schoolYear).filter(Boolean))].sort().reverse();
   const f = { map: '', year: currentSchoolYear(), q: '' };
@@ -238,13 +239,14 @@ async function renderScores(body) {
     const list = filtered();
     info.textContent = `${list.length} games`;
     clear(tableWrap).append(el('table.t-table',
-      el('thead', el('tr', ['When', 'Name', 'Class', 'Map', 'Storms', 'Kept out', 'Score', ''].map(h => el('th', h)))),
+      el('thead', el('tr', ['When', 'Name', 'Class', 'Map', 'Storms', 'River health', 'Removed', 'Score', ''].map(h => el('th', h)))),
       el('tbody', list.map(r => {
         const tr = el('tr' + (r.hidden ? '.is-hidden' : ''),
           el('td', r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : ''),
           el('td', r.name || ''), el('td', r.period || ''), el('td', mapNames[r.mapId] || r.mapId),
           el('td.num', (r.wavesCleared ?? '') + (r.won ? ' ✓' : '')),
-          el('td.num', r.prevented != null ? Math.round(r.prevented * 100) + '%' : ''),
+          el('td.num', r.hp != null ? (mapHp[r.mapId] ? `${r.hp} / ${mapHp[r.mapId]}` : String(r.hp)) : ''),
+          el('td.num', r.prevented != null ? (r.prevented * 100).toFixed(1) + '%' : ''),
           el('td.num', fmt(r.score || 0)),
           el('td', el('div.map-actions',
             el('button.btn.ghost.small', { onclick: async () => { try { await FB.setRunHidden(r.id, !r.hidden); r.hidden = !r.hidden; draw(); } catch (err) { alert(err.message); } } }, r.hidden ? 'Unhide' : 'Hide'),

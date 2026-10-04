@@ -181,7 +181,7 @@ function howToPlay() {
     el('section.card',
       el('h3', 'Scoring — it\'s an engineering trade-off'),
       el('table.score-table',
-        el('tr', el('td', 'Water Quality'), el('td', `up to ${SCORE_MAX.water}`), el('td', 'How much of each storm\'s pollution you kept out of the creek')),
+        el('tr', el('td', 'Water Quality'), el('td', `up to ${SCORE_MAX.water}`), el('td', 'Each storm is graded like a water-quality standard: 100% removed earns full points, 95% or less earns none')),
         el('tr', el('td', 'River Health'), el('td', `up to ${SCORE_MAX.health}`), el('td', 'Health left at the end')),
         el('tr', el('td', 'Storms Survived'), el('td', `up to ${SCORE_MAX.waves}`), el('td', '100 per wave cleared')),
         el('tr', el('td', 'Cost Efficiency'), el('td', `up to ${SCORE_MAX.efficiency}`), el('td', 'Pollution removed per dollar spent — building, upgrades, maintenance, and repairs all count')),

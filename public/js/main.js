@@ -178,8 +178,8 @@ async function showEnd(game, map) {
   const saveStatus = el('div.save-status');
 
   const why = {
-    water: `${Math.round(sc.detail.preventedPct * 100)}% of the pollution load kept out of the creek`,
-    health: `${Math.round(game.hp)} of ${game.maxHp} river health left`,
+    water: `Removed ${pct1(sc.detail.preventedPct)} of the pollution load (${fmt(Math.round(sc.detail.removed))} of ${fmt(Math.round(sc.detail.potential))} units). Each storm needs over 95% for any credit.`,
+    health: `${Math.round(game.hp)} of ${game.maxHp} river health left — ${fmt(Math.round(sc.detail.potential - sc.detail.removed))} units reached the creek`,
     waves: `${game.stats.wavesCleared} of ${game.maxWaves} storms`,
     efficiency: `${sc.detail.perHundred.toFixed(1)} load removed per $100 · net spent $${fmt(sc.detail.netSpent)}`,
     land: `${sc.detail.acres.toFixed(2)} of ${map.landAllowance} acres used`,
@@ -204,6 +204,14 @@ async function showEnd(game, map) {
       : `The creek was overwhelmed during storm ${game.wave}.`),
     el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '10px', marginTop: '12px' } },
       el('span.end-total', fmt(sc.total)), el('span.muted', `points (max ${fmt(Object.values(SCORE_MAX).reduce((a, b) => a + b, 0))})`)),
+    (() => {
+      // The "99% removed but the river is half dead" lesson
+      const leaked = Math.round(sc.detail.potential - sc.detail.removed);
+      const lost = game.maxHp - Math.round(game.hp);
+      if (sc.detail.preventedPct < 0.95 || lost < game.maxHp * 0.2) return null;
+      return el('div.tip', el('strong', `You removed ${pct1(sc.detail.preventedPct)} of the pollution, but the creek still lost ${lost} health. `),
+        `About ${fmt(Math.round(sc.detail.potential))} units washed down the site, and a creek can only absorb a little. The ${fmt(leaked)} units that slipped through did the damage. That's why real stormwater permits limit how much pollution reaches a stream, not just the percent removed.`);
+    })(),
     el('div.end-cols',
       el('div',
         el('h4', 'Score breakdown'),
@@ -307,17 +315,24 @@ function bestPerPerson(runs) {
   return [...best.values()].sort((a, b) => b.score - a.score);
 }
 
+function pct1(f) {
+  // 99.6% shouldn't round up to a perfect-looking 100%
+  const v = f * 100;
+  return (v >= 99 && v < 100 ? Math.floor(v * 10) / 10 : Math.floor(v)) + '%';
+}
+
 function scoreTable(rows) {
   if (!rows.length) return el('p.muted', 'No scores yet. Play a round to get on the board!');
   const me = state.player;
+  const maxHp = state.maps.find(m => m.id === lbMap)?.startHP;
   return el('table.lb-table',
-    el('thead', el('tr', el('th', '#'), el('th', 'Engineer'), el('th', 'Class'), el('th.num', 'Storms'), el('th.num', 'Kept out'), el('th.num', 'Score'))),
+    el('thead', el('tr', el('th', '#'), el('th', 'Engineer'), el('th', 'Class'), el('th.num', 'Storms'), el('th.num', 'River health'), el('th.num', 'Score'))),
     el('tbody', rows.map((r, i) => el('tr' + (me && r.name === me.name && r.period === me.period ? '.me' : ''),
       el('td', el('span.rank' + (i < 3 ? '.r' + (i + 1) : ''), i + 1)),
       el('td', r.name || '—'),
       el('td.muted', r.period || ''),
       el('td.num', (r.wavesCleared ?? '—') + (r.won ? ' ✓' : '')),
-      el('td.num', r.prevented != null ? Math.round(r.prevented * 100) + '%' : '—'),
+      el('td.num', r.hp != null ? (maxHp ? `${r.hp} / ${maxHp}` : String(r.hp)) : '—'),
       el('td.num.score', fmt(r.score)),
     ))),
   );
