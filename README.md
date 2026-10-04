@@ -92,6 +92,12 @@ After changing numbers, run `npm run sim` to see how bots do on each map. As tun
 
 Add `?dev` to the game URL for a 10× speed button.
 
+## Graphics and controls
+
+- **Zoom:** pinch on phones and tablets, use the mouse wheel or trackpad pinch on Chromebooks, or use the on-screen **+ / −** buttons. Drag to move around while zoomed in. **⤢** shows the whole map again. On a keyboard, `+`, `-` and `0` do the same.
+- **Graphics mode:** ☰ menu → **Graphics: Quality / Performance**. If a storm runs below about 30 fps for a few seconds, the game switches to Performance by itself and tells the student.
+- **Art:** every BMP and pollutant is drawn in `public/js/render/sprites.js`. Each one is drawn once into a cached image, so detailed art doesn't slow the game down.
+
 ## Running locally
 
 ```bash

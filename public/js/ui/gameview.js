@@ -36,6 +36,8 @@ export class GameView {
     this.build();
     this.renderer = new Renderer(this.canvas, this.game);
     this.renderer.reducedEffects = storage()?.getItem('sd-lite') === '1';
+    this.renderer.onCamera = () => this.onCamera();
+    this.slowTime = 0;
     this.bindInput();
     this.refreshShop();
     this.refreshStorm();
@@ -48,10 +50,15 @@ export class GameView {
     this.ro = new ResizeObserver(() => this.renderer.resize());
     this.ro.observe(this.stage);
     this.banner(`${map.name}`, 'Build BMPs, then start the first storm', 2600);
+    if (matchMedia('(pointer: coarse)').matches && !storage()?.getItem('sd-hint-zoom')) {
+      storage()?.setItem('sd-hint-zoom', '1');
+      setTimeout(() => this.toast('Pinch to zoom in on the map. Drag with one finger to move around.', 'info', 6000), 2800);
+    }
   }
 
   destroy() {
     cancelAnimationFrame(this.raf);
+    this.renderer.destroy();
     window.removeEventListener('resize', this.onResize);
     window.removeEventListener('keydown', this.onKey);
     this.ro?.disconnect();
@@ -71,7 +78,13 @@ export class GameView {
     this.bannerEl = el('div.banner');
     this.toasts = el('div.toasts');
     this.confirmEl = el('div.place-confirm.hidden');
-    this.stage = el('div.stage', this.canvas, this.bannerEl, this.toasts, this.confirmEl);
+    const zoomBy = f => { const r = this.renderer; r.zoomAt(r.cssW / 2, r.cssH / 2, f); };
+    this.zoomCtl = el('div.zoom-ctl',
+      el('button.zbtn', { title: 'Zoom in (+)', 'aria-label': 'Zoom in', onclick: () => zoomBy(1.4) }, '+'),
+      el('button.zbtn', { title: 'Zoom out (−)', 'aria-label': 'Zoom out', onclick: () => zoomBy(1 / 1.4) }, '−'),
+      el('button.zbtn.zfit', { title: 'Show the whole map (0)', 'aria-label': 'Show whole map', onclick: () => this.renderer.resetView() }, '⤢'),
+    );
+    this.stage = el('div.stage', this.canvas, this.zoomCtl, this.bannerEl, this.toasts, this.confirmEl);
     this.stormEl = el('section.storm');
     this.shopEl = el('section.shop');
     this.infoEl = el('section.info');
@@ -118,11 +131,28 @@ export class GameView {
     }
     this.renderer.updateEffects(this.paused ? 0 : dt * (g.phase === 'wave' ? SPEEDS[this.speedIdx] : 1));
     this.renderer.draw();
+    this.watchPerformance(dt);
     this.updateHud();
     this.infoTick = (this.infoTick || 0) + dt;
     if (this.infoTick > 0.25) { this.infoTick = 0; this.refreshInfo(); this.refreshShopState(); }
     this.raf = requestAnimationFrame(this.frame);
   };
+
+  /**
+   * If the game is visibly struggling (under ~30 fps for a few seconds of
+   * a storm), switch to Performance graphics automatically. Students can
+   * switch back in the menu; an explicit choice is remembered.
+   */
+  watchPerformance(dt) {
+    const r = this.renderer;
+    if (r.quality !== 'high' || this.paused || this.game.phase !== 'wave' || storage()?.getItem('sd-lite') === '0') return;
+    this.slowTime = dt > 0.034 ? this.slowTime + dt : Math.max(0, this.slowTime - dt * 0.5);
+    if (this.slowTime > 3) {
+      r.setQuality('low');
+      storage()?.setItem('sd-lite', '1');
+      this.toast('Switched to Performance graphics so the game runs smoothly. You can change this in the ☰ menu.', 'info', 6000);
+    }
+  }
 
   updateHud() {
     const g = this.game;
@@ -237,8 +267,8 @@ export class GameView {
       el('div.modal',
         el('h2', 'Menu'),
         el('button.btn', { onclick: close }, 'Resume'),
-        el('button.btn.ghost', { onclick: () => { this.renderer.reducedEffects = !lite; storage()?.setItem('sd-lite', lite ? '0' : '1'); close(); } },
-          lite ? 'Effects: Reduced (tap for Full)' : 'Effects: Full (tap for Reduced)'),
+        el('button.btn.ghost', { onclick: () => { this.renderer.reducedEffects = !lite; storage()?.setItem('sd-lite', lite ? '0' : '1'); this.slowTime = 0; close(); } },
+          lite ? 'Graphics: Performance (tap for Quality)' : 'Graphics: Quality (tap for Performance)'),
         el('button.btn.danger', { onclick: () => { modal.remove(); this.onQuit?.(); } }, 'Quit game (score not saved)'),
       ));
     this.root.append(modal);
@@ -502,29 +532,75 @@ export class GameView {
   }
 
   // ---------------------------------------------------------------- input
+  // One finger / mouse: tap to select or build; drag to pan when zoomed in.
+  // Two fingers: pinch to zoom. Mouse wheel / trackpad pinch: zoom.
   bindInput() {
-    const cv = this.canvas;
+    const cv = this.canvas, R = () => this.renderer;
     const pos = (e) => { const r = cv.getBoundingClientRect(); return { sx: e.clientX - r.left, sy: e.clientY - r.top }; };
-    let down = null;
+    const dist = (a, b) => Math.hypot(a.sx - b.sx, a.sy - b.sy) || 1;
+    const mid = (a, b) => ({ sx: (a.sx + b.sx) / 2, sy: (a.sy + b.sy) / 2 });
+    const pts = new Map();
+    let gesture = null;   // { mode: 'tap' | 'pan' | 'pinch', ... }
 
-    cv.addEventListener('pointerdown', e => { down = { ...pos(e), type: e.pointerType }; });
+    cv.addEventListener('pointerdown', e => {
+      const p = pos(e);
+      pts.set(e.pointerId, p);
+      try { cv.setPointerCapture(e.pointerId); } catch {}
+      if (pts.size === 1) gesture = { mode: 'tap', start: p, last: p, type: e.pointerType, button: e.button };
+      else if (pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        gesture = { mode: 'pinch', d0: dist(a, b), z0: R().zoom, mid: mid(a, b) };
+      }
+    });
     cv.addEventListener('pointermove', e => {
-      if (e.pointerType !== 'mouse' || !this.placing) return;
-      const { sx, sy } = pos(e);
-      const w = this.renderer.toWorld(sx, sy);
+      const p = pos(e);
+      if (pts.has(e.pointerId)) pts.set(e.pointerId, p);
+      if (gesture?.mode === 'pinch' && pts.size >= 2) {
+        const [a, b] = [...pts.values()], m = mid(a, b);
+        R().panBy(m.sx - gesture.mid.sx, m.sy - gesture.mid.sy);
+        R().zoomAt(m.sx, m.sy, (gesture.z0 * dist(a, b) / gesture.d0) / R().zoom);
+        gesture.mid = m;
+        return;
+      }
+      if (gesture && pts.has(e.pointerId)) {
+        const moved = Math.hypot(p.sx - gesture.start.sx, p.sy - gesture.start.sy);
+        if (gesture.mode === 'tap' && moved > (gesture.type === 'mouse' ? 6 : 10) && R().zoom > 1) gesture.mode = 'pan';
+        if (gesture.mode === 'pan') { R().panBy(p.sx - gesture.last.sx, p.sy - gesture.last.sy); cv.style.cursor = 'grabbing'; }
+        gesture.last = p;
+        if (gesture.mode === 'pan') return;
+      }
+      if (e.pointerType !== 'mouse') return;
+      if (!this.placing) { cv.style.cursor = R().zoom > 1 ? 'grab' : ''; return; }
+      const w = R().toWorld(p.sx, p.sy);
       const c = this.game.canPlace(this.placing, w.x, w.y);
-      this.renderer.ghost = { type: this.placing, x: c.ok ? c.x : w.x, y: c.ok ? c.y : w.y, ok: c.ok };
+      R().ghost = { type: this.placing, x: c.ok ? c.x : w.x, y: c.ok ? c.y : w.y, ok: c.ok };
       cv.style.cursor = c.ok ? 'pointer' : 'not-allowed';
     });
-    cv.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !this.pendingTouch) this.renderer.ghost = null; });
-    cv.addEventListener('pointerup', e => {
-      if (!down) return;
+    const end = (e) => {
+      if (!pts.has(e.pointerId)) return;
       const p = pos(e);
-      const moved = Math.hypot(p.sx - down.sx, p.sy - down.sy);
-      down = null;
-      if (moved > 14) return;
-      this.tap(p.sx, p.sy, e.pointerType);
-    });
+      pts.delete(e.pointerId);
+      if (!gesture) return;
+      if (gesture.mode === 'pinch') {
+        // One finger still down: let it keep panning, but never count it as a tap
+        if (pts.size === 1) { const rem = [...pts.values()][0]; gesture = { mode: 'pan', start: rem, last: rem, type: 'touch' }; }
+        else if (pts.size === 0) gesture = null;
+        return;
+      }
+      if (gesture.mode === 'tap' && e.type === 'pointerup' && gesture.button !== 2) {
+        if (Math.hypot(p.sx - gesture.start.sx, p.sy - gesture.start.sy) <= 14) this.tap(p.sx, p.sy, e.pointerType);
+      }
+      if (pts.size === 0) { gesture = null; cv.style.cursor = ''; }
+    };
+    cv.addEventListener('pointerup', end);
+    cv.addEventListener('pointercancel', end);
+    cv.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !this.pendingTouch && !pts.size) R().ghost = null; });
+    cv.addEventListener('wheel', e => {
+      e.preventDefault();
+      const p = pos(e);
+      // Trackpad pinch arrives as ctrl+wheel with small deltas
+      R().zoomAt(p.sx, p.sy, Math.exp(-e.deltaY * (e.ctrlKey ? 0.012 : 0.0015)));
+    }, { passive: false });
     cv.addEventListener('contextmenu', e => { e.preventDefault(); this.cancelPlacing(); });
 
     this.onKey = (e) => {
@@ -532,13 +608,22 @@ export class GameView {
       if (!this.guideEl.classList.contains('hidden')) { if (e.key === 'Escape' || e.key === 'g' || e.key === 'G') this.guideEl.querySelector('.guide-top .btn')?.click(); return; }
       const m = BMP_ORDER.find(id => BMPS[id].key === e.key);
       if (m) { this.pickBmp(m); return; }
+      const r = this.renderer;
       if (e.key === ' ') { e.preventDefault(); document.activeElement?.blur?.(); if (this.game.phase === 'wave') this.togglePause(); else this.startWave(); }
       else if (e.key === 'f' || e.key === 'F') this.cycleSpeed();
       else if (e.key === 'g' || e.key === 'G') this.openGuide();
+      else if (e.key === '+' || e.key === '=') r.zoomAt(r.cssW / 2, r.cssH / 2, 1.4);
+      else if (e.key === '-' || e.key === '_') r.zoomAt(r.cssW / 2, r.cssH / 2, 1 / 1.4);
+      else if (e.key === '0') r.resetView();
       else if (e.key === 'Escape') { this.cancelPlacing(); this.clearSelection(); }
       else if ((e.key === 'u' || e.key === 'U') && this.selected?.kind === 'tower') this.act(this.game.upgradeTower(this.selected.ref.id));
     };
     window.addEventListener('keydown', this.onKey);
+  }
+
+  onCamera() {
+    this.zoomCtl?.classList.toggle('zoomed', this.renderer.zoom > 1.01);
+    if (this.pendingTouch && !this.confirmEl.classList.contains('hidden')) this.positionConfirm();
   }
 
   tap(sx, sy, pointerType) {
@@ -552,10 +637,11 @@ export class GameView {
         return;
       }
       // Touch: first tap previews, second tap on the ghost (or ✓) builds.
-      if (this.pendingTouch && Math.hypot(this.pendingTouch.x - w.x, this.pendingTouch.y - w.y) < 40 && this.pendingTouch.ok) {
+      if (this.pendingTouch && Math.hypot(this.pendingTouch.x - w.x, this.pendingTouch.y - w.y) < Math.max(40, r.touchPad(26)) && this.pendingTouch.ok) {
         this.place(this.pendingTouch.x, this.pendingTouch.y);
         return;
       }
+      if (!c.ok) { const t = r.towerAt(w.x, w.y); if (t) { this.select({ kind: 'tower', ref: t }); return; } }
       const gx = c.ok ? c.x : w.x, gy = c.ok ? c.y : w.y;
       this.pendingTouch = { x: gx, y: gy, ok: c.ok };
       r.ghost = { type: this.placing, x: gx, y: gy, ok: c.ok };
@@ -586,16 +672,23 @@ export class GameView {
   }
 
   showConfirm(x, y, c) {
-    const s = this.renderer.toScreen(x, y);
     clear(this.confirmEl);
     this.confirmEl.append(
       c.ok ? el('button.cf-ok', { onclick: () => this.place(x, y) }, `✓ Build $${BMPS[this.placing].cost}`) : el('span.cf-bad', c.reason),
       el('button.cf-x', { onclick: () => this.cancelPlacing() }, '✕'),
     );
     this.confirmEl.classList.remove('hidden');
-    const W = this.stage.clientWidth;
-    const left = Math.max(8, Math.min(W - 200, s.x - 90));
-    const top = s.y > 120 ? s.y - 100 : s.y + 60;
+    this.positionConfirm();
+  }
+
+  positionConfirm() {
+    const pt = this.pendingTouch; if (!pt) return;
+    const s = this.renderer.toScreen(pt.x, pt.y);
+    const W = this.stage.clientWidth, H = this.stage.clientHeight;
+    const bw = this.confirmEl.offsetWidth || 200;
+    const off = BMPS[this.placing]?.size * this.renderer.scale + 14 || 50;
+    const left = Math.max(8, Math.min(W - bw - 8, s.x - bw / 2));
+    const top = s.y - off - 50 > 4 ? s.y - off - 50 : Math.min(H - 54, s.y + off);
     this.confirmEl.style.left = left + 'px';
     this.confirmEl.style.top = top + 'px';
   }
