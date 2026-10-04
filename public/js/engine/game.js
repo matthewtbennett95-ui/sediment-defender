@@ -503,9 +503,18 @@ export class Game {
     this.money += reward;
     t.kills++;
     const bt = this.byType(e.type);
-    bt.prevented += def.dmg; bt.stopped++;
+    bt.stopped++;
     const wi = this.wave - 1;
-    this.stats.wavePrevented[wi] = (this.stats.wavePrevented[wi] || 0) + def.dmg;
+    if (def.splits || def.payload) {
+      // Breaking it up doesn't remove the pollution — it turns into the
+      // smaller pieces (which are counted on their own). So this parent
+      // leaves the load totals instead of counting as "kept out".
+      bt.potential -= def.dmg;
+      this.stats.wavePotential[wi] = (this.stats.wavePotential[wi] || 0) - def.dmg;
+    } else {
+      bt.prevented += def.dmg;
+      this.stats.wavePrevented[wi] = (this.stats.wavePrevented[wi] || 0) + def.dmg;
+    }
     this.emit('kill', { x: e.x, y: e.y, ptype: e.type, reward, color: BMPS[t.type].color });
 
     // Breakups release smaller pollutants that keep flowing.
