@@ -58,13 +58,17 @@ function botTurn(game, skill) {
     if (t.fill > cap * 0.6 && game.money > game.cleanCost(t)) game.cleanTower(t.id);
   }
   // breach management
+  if (game.map.breach && skill === 'repairer') {
+    // Patch everything, every time, while money lasts
+    for (const p of game.paths) if (p.status === 'stressed' || (p.breachable && p.status === 'open')) game.repairChannel(p.id);
+  }
   if (game.map.breach && skill === 'good') {
+    // Fix only when it's cheap compared with what you have
     for (const p of game.paths) {
-      if (p.status === 'stressed' && game.money >= game.map.breach.reinforceCost) game.repairChannel(p.id);
+      if (p.status === 'stressed' && game.reinforceCost() < game.money * 0.5) game.repairChannel(p.id);
     }
     const open = game.paths.filter(p => p.breachable && p.status === 'open');
-    if (open.length >= 2 && game.money > game.repairCost() + 50) {
-      // repair the shortest (least defensible) open breach
+    if (open.length >= 2 && game.repairCost() < game.money * 0.4) {
       open.sort((a, b) => a.length - b.length);
       game.repairChannel(open[0].id);
     }
@@ -133,6 +137,7 @@ function play(map, skill, seed) {
   const game = new Game(map, { seed });
   while (game.phase !== 'won' && game.phase !== 'lost') {
     botTurn(game, skill);
+    if (game.map.breach && [12, 16, 20].includes(game.wave)) (game._openAt ||= {})[game.wave] = game.paths.filter(p => p.breachable && (p.status === 'open')).length;
     game.startWave();
     let guard = 0;
     const hp0 = game.hp;
@@ -149,12 +154,17 @@ function play(map, skill, seed) {
 
 for (const raw of BUILTIN_MAPS) {
   if (ONLY && raw.id !== ONLY) continue;
-  const { map } = normalizeMap({ ...raw, builtIn: true });
-  for (const skill of ['good', 'naive']) {
+  const { map: m0 } = normalizeMap({ ...raw, builtIn: true });
+  // BOOST > 1 stands in for a stronger (human) player: more money to work with.
+  const BOOST = +process.env.BOOST || 1;
+  const map = { ...m0, startMoney: Math.round(m0.startMoney * BOOST), rewardScale: m0.rewardScale * BOOST };
+  for (const skill of (map.breach ? ['good', 'repairer', 'naive'] : ['good', 'naive'])) {
     let wins = 0, tot = 0, waves = 0, hp = 0; const parts = {};
-    let money = 0, towers = 0, acres = 0, per100 = 0;
+    let money = 0, towers = 0, acres = 0, per100 = 0; const openAt = { 12: 0, 16: 0, 20: 0 }, openN = { 12: 0, 16: 0, 20: 0 }; let fixes = 0, fixSpend = 0;
     for (let i = 0; i < RUNS; i++) {
       const { game, score } = play(map, skill, 1000 + i);
+      for (const w in game._openAt || {}) { openAt[w] += game._openAt[w]; openN[w]++; }
+      fixes += game.fixCount(); fixSpend += game.stats.spentRepair;
       if (game.phase === 'won') wins++;
       tot += score.total; waves += game.stats.wavesCleared; hp += game.hp;
       for (const k in score.parts) parts[k] = (parts[k] || 0) + score.parts[k];
@@ -163,5 +173,6 @@ for (const raw of BUILTIN_MAPS) {
     const avg = v => Math.round(v / RUNS);
     console.log(`${map.id.padEnd(20)} ${skill.padEnd(6)} win ${wins}/${RUNS}  waves ${(waves / RUNS).toFixed(1)}  hp ${avg(hp)}  score ${avg(tot)}  towers ${(towers / RUNS).toFixed(1)}  acres ${(acres / RUNS).toFixed(2)}  $left ${avg(money)}  per100 ${(per100 / RUNS).toFixed(1)}`);
     console.log('   ', Object.entries(parts).map(([k, v]) => `${k}:${avg(v)}`).join(' '));
+    if (map.breach) console.log(`    extra open channels at storm 12/16/20: ${[12, 16, 20].map(w => openN[w] ? (openAt[w] / openN[w]).toFixed(1) : '–').join(' / ')}   fixes ${(fixes / RUNS).toFixed(1)}  spent on fixes $${avg(fixSpend)}`);
   }
 }

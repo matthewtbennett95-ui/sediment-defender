@@ -195,10 +195,10 @@ export class GameView {
         break;
       case 'breachWarning':
         this.banner('⚠ Seepage detected', `${ev.path.label} will fail after the next storm`, 3200);
-        this.toast(`Seepage on the ${ev.path.label}. Tap the orange wall to reinforce it for $${g.map.breach.reinforceCost} before it fails.`, 'warn', 6000);
+        this.toast(`Seepage on the ${ev.path.label}${ev.refail ? ' — the old patch is giving way' : ''}. Tap the orange wall to reinforce it for $${g.reinforceCost()}, or let it go and defend the channel.`, 'warn', 6000);
         break;
       case 'breach':
-        this.banner(`💥 ${ev.path.label} BREACHED`, ev.sudden ? 'No warning — that happens in real life too' : 'Polluted water is pouring out', 3000);
+        this.banner(`💥 ${ev.path.label} BREACHED`, ev.refail ? 'The patch failed — repairs on old walls don\'t last forever' : ev.sudden ? 'No warning — that happens in real life too' : 'Polluted water is pouring out', 3000);
         this.toast(`${ev.path.label} breached! Repair it (tap the red wall) for $${g.repairCost()} or defend its channel.`, 'bad', 6000);
         break;
       case 'repaired':
@@ -422,7 +422,7 @@ export class GameView {
       const t = s.ref, st = statsAt(t.type, t.tier);
       key += [t.id, t.tier, Math.round(t.fill / st.capacity * 20), g.money >= (BMPS[t.type].tiers[t.tier]?.cost ?? 1e9), g.money >= g.cleanCost(t), g.canSell(), t.targeting, t.kills].join('|');
     } else if (s.kind === 'wall') {
-      key += s.ref.id + s.ref.status + (g.money >= g.repairCost());
+      key += s.ref.id + s.ref.status + g.repairCost() + g.reinforceCost() + (g.money >= g.repairCost()) + (g.money >= g.reinforceCost());
     } else key += s.type;
     if (!force && key === this.lastInfoKey) return;
     this.lastInfoKey = key;
@@ -511,13 +511,14 @@ export class GameView {
     } else if (p.status === 'stressed') {
       kids.push(el('p.warn', '⚠ Water is seeping through this wall. It will fail after the next storm.'),
         el('p', 'Reinforcing now (riprap + compacted clay) stops the breach before it happens. It costs much less than an emergency repair.'),
-        el('button.btn', { disabled: g.money < cfg.reinforceCost, onclick: () => this.act(g.repairChannel(p.id)) }, `Reinforce wall ($${cfg.reinforceCost})`));
+        el('button.btn', { disabled: g.money < g.reinforceCost(), onclick: () => this.act(g.repairChannel(p.id)) }, `Reinforce wall ($${g.reinforceCost()})`),
+        el('p.muted.small', 'Every fix costs more than the last, and the whole wall gets older each storm. At some point it\'s cheaper to let a section go and build BMPs along its channel instead.'));
     } else if (p.status === 'open') {
       kids.push(el('p', 'This wall has failed and runoff is pouring out. An emergency repair closes the channel. Pollutants already in it keep flowing.'),
-        el('p.muted.small', 'Each repair costs more than the last as materials and crews get scarce.'),
+        el('p.muted.small', 'Every fix costs more than the last, and costs rise each storm as the wall ages. Compare this price to building BMPs along the channel instead.'),
         el('button.btn', { disabled: g.money < g.repairCost(), onclick: () => this.act(g.repairChannel(p.id)) }, `Emergency repair ($${g.repairCost()})`));
     } else if (p.status === 'repaired') {
-      kids.push(el('p', 'Repaired and holding.'));
+      kids.push(el('p', 'Repaired and holding — for now. Patched walls can fail again after a few storms.'));
     } else {
       kids.push(el('p', 'Holding — for now. Walls that start to fail will show orange seepage first… usually.'));
     }

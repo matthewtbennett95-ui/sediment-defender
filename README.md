@@ -84,7 +84,12 @@ Each data file has comments explaining its numbers.
 - `public/js/maps/builtin.js`: starting budget, river health, and breach settings for each map
 - `public/js/engine/scoring.js`: score weights
 
-After changing numbers, run `npm run sim` to see how bots do on each map. As tuned right now:
+After changing numbers, run `npm run sim` to see how bots do on each map. The bots play worse than students do. To stand in for a strong student, run `BOOST=1.5 npm run sim`, which gives the bots 50% more money.
+
+**Map 3 breaches** are tuned so that patching every failure stops paying off. Every fix costs more than the last, everything costs about 4.5% more per storm as the wall ages, patched walls can fail again, and warnings get rarer late in the season. With `BOOST=1.5`:
+
+- A bot that fixes only when it's cheap ends up defending about 1 extra channel by storm 12, 2 by storm 16, and 3 by storm 20.
+- A bot that patches everything spends about $2,900 on repairs and wins only about 1 in 4. As tuned right now:
 
 - **Easy:** wins about every time
 - **Medium:** about half
