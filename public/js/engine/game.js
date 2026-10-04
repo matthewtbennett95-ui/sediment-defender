@@ -60,7 +60,7 @@ export class Game {
       wavesCleared: 0, repairs: 0, reinforced: 0, cleanings: 0,
     };
 
-    this.breach = map.breach ? { wavesSinceEvent: 0, pendingSudden: null, events: [] } : null;
+    this.breach = map.breach ? { wavesSinceEvent: 0, pendingSudden: [], events: [] } : null;
   }
 
   // ------------------------------------------------------------------
@@ -97,9 +97,23 @@ export class Game {
   sellValue(t) { return Math.round(investedAt(t.type, t.tier) * SELL_RATE); }
   canSell() { return this.phase === 'prep' || this.phase === 'between'; }
 
+  // Each fix costs more than the last (crews, stone and clay get scarce),
+  // and the whole embankment gets older and weaker as the season goes on.
+  // Eventually it's cheaper to treat a breach channel than to keep patching.
+  fixCount() { return this.stats.repairs + this.stats.reinforced; }
+  ageFactor() {
+    const b = this.map.breach;
+    return 1 + (b?.ageRate || 0) * Math.max(0, this.wave - 1);
+  }
   repairCost() {
     const b = this.map.breach;
-    return b ? b.repairBase + b.repairStep * this.stats.repairs : 0;
+    if (!b) return 0;
+    return Math.round((b.repairBase + b.repairStep * this.fixCount()) * this.ageFactor() / 5) * 5;
+  }
+  reinforceCost() {
+    const b = this.map.breach;
+    if (!b) return 0;
+    return Math.round((b.reinforceCost + (b.reinforceStep || 0) * this.fixCount()) * this.ageFactor() / 5) * 5;
   }
 
   // ------------------------------------------------------------------
@@ -238,13 +252,14 @@ export class Game {
     const p = this.pathById[pathId];
     if (!p || !p.breachable) return { ok: false, reason: "This breach is too big to repair" };
     if (p.status === 'stressed') {
-      const cost = this.map.breach.reinforceCost;
+      const cost = this.reinforceCost();
       if (this.money < cost) return { ok: false, reason: 'Not enough budget' };
       this.money -= cost;
       this.stats.spentRepair += cost;
       this.stats.reinforced++;
       addMaterials(this.stats.materials, { stone: 25, excavation: 40 });
       p.status = 'repaired';
+      p.repairedAt = this.wave;
       this.emit('reinforced', { path: p, cost });
       return { ok: true, cost };
     }
@@ -256,6 +271,7 @@ export class Game {
     this.stats.repairs++;
     addMaterials(this.stats.materials, { stone: 60, excavation: 120 });
     p.status = 'repaired';
+    p.repairedAt = this.wave;
     this.emit('repaired', { path: p, cost });
     return { ok: true, cost };
   }
@@ -357,13 +373,15 @@ export class Game {
 
   breachStep() {
     const b = this.breach;
-    if (!b || !b.pendingSudden || this.waveTime < b.pendingSudden.at) return;
-    const p = this.pathById[b.pendingSudden.pathId];
-    b.pendingSudden = null;
-    if (p && p.status === 'closed') {
-      p.status = 'open';
-      this.emit('breach', { path: p, sudden: true });
+    if (!b || !b.pendingSudden.length) return;
+    for (const ev of b.pendingSudden.filter(e => this.waveTime >= e.at)) {
+      const p = this.pathById[ev.pathId];
+      if (p && (p.status === 'closed' || p.status === 'repaired')) {
+        p.status = 'open';
+        this.emit('breach', { path: p, sudden: true, refail: !!ev.refail });
+      }
     }
+    b.pendingSudden = b.pendingSudden.filter(e => this.waveTime < e.at);
   }
 
   slowStep() {
@@ -563,20 +581,39 @@ export class Game {
     }
     if (cleared < cfg.firstEventAfterWave) return;
     b.wavesSinceEvent++;
-    const openCount = this.paths.filter(p => p.status === 'open').length;
-    const candidates = this.paths.filter(p => p.breachable && p.status === 'closed');
-    if (!candidates.length || openCount >= cfg.maxOpen) return;
-    const trigger = this.rng() < cfg.eventChance || b.wavesSinceEvent >= cfg.maxGap;
-    if (!trigger) return;
-    b.wavesSinceEvent = 0;
-    const p = candidates[Math.floor(this.rng() * candidates.length)];
-    const sudden = this.wave >= cfg.suddenFromWave && this.rng() > cfg.warnChance;
-    if (sudden) {
-      // Fails without warning partway through the next storm.
-      b.pendingSudden = { pathId: p.id, at: 8 + this.rng() * 14 };
-    } else {
-      p.status = 'stressed';
-      this.emit('breachWarning', { path: p });
+    const w = this.wave;                       // the storm about to come
+    const into = w - cfg.firstEventAfterWave;  // how far into the failing season
+    // Failures get more likely as the season goes on…
+    const chance = Math.min(0.95, cfg.eventChance + (cfg.eventRamp || 0) * into);
+    let events = (this.rng() < chance || b.wavesSinceEvent >= cfg.maxGap) ? 1 : 0;
+    // …and late in the season two sections can go in the same storm.
+    if (events && cfg.doubleFromWave && w >= cfg.doubleFromWave && this.rng() < (cfg.doubleChance || 0)) events = 2;
+    for (let i = 0; i < events; i++) {
+      const openCount = this.paths.filter(p => p.status === 'open').length + b.pendingSudden.length;
+      if (openCount >= cfg.maxOpen) break;
+      // Intact walls can fail; patched walls can fail AGAIN once they've
+      // aged a few storms (patches are weaker than the original wall).
+      const pool = [];
+      for (const p of this.paths) {
+        if (!p.breachable || b.pendingSudden.some(e => e.pathId === p.id)) continue;
+        if (p.status === 'closed') pool.push({ p, wt: 1 });
+        else if (p.status === 'repaired' && cfg.refailAfter && w - (p.repairedAt || 0) >= cfg.refailAfter) pool.push({ p, wt: cfg.refailWeight ?? 0.6 });
+      }
+      if (!pool.length) break;
+      let r = this.rng() * pool.reduce((a, c) => a + c.wt, 0), pick = pool[0];
+      for (const c of pool) { r -= c.wt; if (r <= 0) { pick = c; break; } }
+      const p = pick.p, refail = p.status === 'repaired';
+      b.wavesSinceEvent = 0;
+      // Warnings get rarer as the old embankment gets more brittle.
+      const warn = Math.max(cfg.warnMin ?? cfg.warnChance, cfg.warnChance - (cfg.warnDecay || 0) * Math.max(0, w - cfg.suddenFromWave));
+      const sudden = w >= cfg.suddenFromWave && this.rng() > warn;
+      if (sudden) {
+        // Fails without warning partway through the next storm.
+        b.pendingSudden.push({ pathId: p.id, at: 6 + this.rng() * 16, refail });
+      } else {
+        p.status = 'stressed';
+        this.emit('breachWarning', { path: p, refail });
+      }
     }
   }
 }

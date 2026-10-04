@@ -88,16 +88,28 @@ export const pondFailure = {
     { id: 'NE', label: 'NE WALL', breachable: true,
       points: [[900, 88], [1080, 40], [1510, 40], [1510, 560], [1120, 560], [1120, 690], [1270, 690], [1270, 860]] },
   ],
+  // Tuned so patching every failure gets too expensive by mid-season:
+  // most players end up defending 1 extra channel by ~storm 12, 2 by
+  // ~storm 16, and 3 by storm 20. (Check with: npm run sim)
   breach: {
-    firstEventAfterWave: 3,   // earliest wave end that can trigger an event
-    eventChance: 0.4,         // chance of an event at each wave end...
-    maxGap: 4,                // ...but never more than this many waves without one
-    warnChance: 0.7,          // most breaches give a one-wave seepage warning
-    suddenFromWave: 7,        // after this, some breaches happen with NO warning
+    firstEventAfterWave: 3,   // earliest storm that can end with a failure
+    eventChance: 0.36,        // chance of a failure after each storm…
+    eventRamp: 0.015,         // …rising this much every storm after that
+    maxGap: 4,                // never more than this many storms without one
+    doubleFromWave: 15,       // from here, two sections can fail at once…
+    doubleChance: 0.3,        // …this often
+    warnChance: 0.75,         // early on, most failures show seepage first…
+    warnDecay: 0.04,          // …but warnings get rarer every storm after suddenFromWave
+    warnMin: 0.35,
+    suddenFromWave: 6,        // from here, some failures come with NO warning
+    refailAfter: 4,           // a patched wall can fail AGAIN after this many storms
+    refailWeight: 0.6,        // (patched walls are a bit less likely to fail than original ones)
     maxOpen: 4,               // never more than this many open channels at once
-    repairBase: 260,          // emergency repair cost (grows with each repair)
-    repairStep: 90,
-    reinforceCost: 140,       // fixing a section BEFORE it fails is cheaper
+    repairBase: 200,          // emergency repair: base + step × (fixes so far)…
+    repairStep: 70,
+    reinforceCost: 110,       // reinforcing BEFORE failure: base + step × (fixes so far)…
+    reinforceStep: 40,
+    ageRate: 0.045,           // …and everything costs 4.5% more per storm as the wall ages
   },
   decor: [
     { type: 'pond', x: 800, y: 165, rx: 170, ry: 95, label: 'FAILING POND' },

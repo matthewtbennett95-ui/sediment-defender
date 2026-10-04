@@ -10,8 +10,11 @@ export const DIFFICULTY_PRESETS = {
 };
 
 export const DEFAULT_BREACH = {
-  firstEventAfterWave: 2, eventChance: 0.5, maxGap: 3, warnChance: 0.7,
-  suddenFromWave: 7, maxOpen: 5, repairBase: 260, repairStep: 90, reinforceCost: 140,
+  firstEventAfterWave: 3, eventChance: 0.45, eventRamp: 0.04, maxGap: 3,
+  doubleFromWave: 11, doubleChance: 0.35,
+  warnChance: 0.75, warnDecay: 0.05, warnMin: 0.3, suddenFromWave: 5,
+  refailAfter: 4, refailWeight: 0.6, maxOpen: 5,
+  repairBase: 220, repairStep: 75, reinforceCost: 120, reinforceStep: 45, ageRate: 0.05,
 };
 
 const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);

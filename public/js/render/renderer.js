@@ -398,7 +398,7 @@ export class Renderer {
         this.dirty = true;
         this.burst(ev.path.pts[0].x, ev.path.pts[0].y, '#b0b0c0', 12, 1.2);
         break;
-      case 'pathOpened': case 'sold':
+      case 'pathOpened': case 'sold': case 'breachWarning':
         this.dirty = true;
         break;
     }
